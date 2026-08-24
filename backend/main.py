@@ -1,7 +1,8 @@
 import logging
-from typing import Any, Type
+import random
+from typing import Any, Optional, Type
 
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -200,6 +201,77 @@ def submit_assessment(
     db.commit()
     db.refresh(assessment)
     return assessment
+
+
+# ---------------------------------------------------------------------------
+# Automated Control Testing Simulator
+#
+# Randomly issues a Pass/Fail test result against deployed (Monitor-status)
+# mitigation controls. A Fail flips the control's status to "Fail" and opens
+# a linked High Priority issue for remediation.
+# ---------------------------------------------------------------------------
+
+
+@app.post(
+    "/api/v1/simulation/trigger-test",
+    response_model=schemas.SimulationResponse,
+    tags=["simulation"],
+)
+def trigger_control_test(
+    control_id: Optional[int] = Body(default=None, embed=True),
+    db: Session = Depends(get_db),
+) -> schemas.SimulationResponse:
+    query = db.query(models.Control)
+    if control_id is not None:
+        query = query.filter(models.Control.id == control_id)
+        controls = query.all()
+        if not controls:
+            raise HTTPException(status_code=404, detail=f"Control {control_id} not found")
+    else:
+        controls = query.filter(models.Control.status == "Monitor").all()
+
+    results: list[schemas.SimulationTestResult] = []
+    issues_created = 0
+    for control in controls:
+        previous_status = control.status
+        outcome = random.choice(["Pass", "Fail"])
+        issue_id = None
+        if outcome == "Fail":
+            control.status = "Fail"
+            issue = models.Issue(
+                title=f"Control test failure: {control.name}",
+                description=(
+                    f"Automated control testing simulator flagged control '{control.name}' as failing."
+                ),
+                source="Control Failure",
+                priority="High",
+                state="New",
+                risk_id=control.risk_id,
+                control_id=control.id,
+            )
+            db.add(issue)
+            db.flush()
+            issue_id = issue.id
+            issues_created += 1
+
+        results.append(
+            schemas.SimulationTestResult(
+                control_id=control.id,
+                control_name=control.name,
+                result=outcome,
+                previous_status=previous_status,
+                new_status=control.status,
+                issue_id=issue_id,
+            )
+        )
+
+    db.commit()
+    return schemas.SimulationResponse(
+        tested_count=len(results),
+        failed_count=issues_created,
+        issues_created=issues_created,
+        results=results,
+    )
 
 
 # ---------------------------------------------------------------------------

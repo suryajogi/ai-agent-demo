@@ -220,6 +220,25 @@ class RiskAssessmentWithResponses(RiskAssessmentRead):
     responses: list[AssessmentResponseRead] = []
 
 
+# --- Control testing simulator ------------------------------------------------
+
+
+class SimulationTestResult(BaseModel):
+    control_id: int
+    control_name: str
+    result: str  # Pass, Fail
+    previous_status: str
+    new_status: str
+    issue_id: Optional[int] = None
+
+
+class SimulationResponse(BaseModel):
+    tested_count: int
+    failed_count: int
+    issues_created: int
+    results: list[SimulationTestResult]
+
+
 # --- Reporting -------------------------------------------------------------
 
 

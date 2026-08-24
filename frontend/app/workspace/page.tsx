@@ -20,6 +20,7 @@ import { AssessmentLauncherForm } from "./AssessmentLauncherForm";
 import { ControlForm } from "./ControlForm";
 import { DepartmentForm } from "./DepartmentForm";
 import { IssueForm } from "./IssueForm";
+import { HeatmapFilter, RiskHeatmap } from "./RiskHeatmap";
 import { RiskForm } from "./RiskForm";
 import { Card, DataTable } from "./ui";
 
@@ -45,6 +46,7 @@ function StatCard({ label, value }: { label: string; value: string }) {
 export default function WorkspacePage() {
   const [tab, setTab] = useState<Tab>("risks");
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
 
   const [summary, setSummary] = useState<RiskSummaryReport | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -87,6 +89,14 @@ export default function WorkspacePage() {
   const entityName = (id: number | null) => entities.find((e) => e.id === id)?.name ?? "—";
   const riskName = (id: number | null) => risks.find((r) => r.id === id)?.name ?? "—";
   const controlName = (id: number | null) => controls.find((c) => c.id === id)?.name ?? "—";
+
+  const filteredRisks = heatmapFilter
+    ? risks.filter(
+        (r) =>
+          r.inherent_likelihood === heatmapFilter.likelihood &&
+          r.inherent_impact === heatmapFilter.impact
+      )
+    : risks;
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-10">
@@ -147,9 +157,18 @@ export default function WorkspacePage() {
           <Card title="Create Risk">
             <RiskForm entities={entities} onCreated={(r) => setRisks((prev) => [...prev, r])} />
           </Card>
-          <Card title={`Risks (${risks.length})`}>
+          <Card title="Heatmap Matrix">
+            <RiskHeatmap risks={risks} selected={heatmapFilter} onSelectCell={setHeatmapFilter} />
+          </Card>
+          <Card
+            title={
+              heatmapFilter
+                ? `Risks (${filteredRisks.length} of ${risks.length} — Likelihood ${heatmapFilter.likelihood} × Impact ${heatmapFilter.impact})`
+                : `Risks (${risks.length})`
+            }
+          >
             <DataTable
-              rows={risks}
+              rows={filteredRisks}
               onDelete={async (id) => {
                 await apiDelete(`/api/v1/risks/${id}`);
                 setRisks((prev) => prev.filter((r) => r.id !== id));
