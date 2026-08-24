@@ -6,6 +6,7 @@ __pycache__/
 .Python
 *.egg-info/
 .pytest_cache/
+*.db
 
 # Node
 frontend/node_modules/
