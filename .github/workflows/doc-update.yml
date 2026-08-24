@@ -1,0 +1,43 @@
+name: Auto-Update Architecture Documentation
+
+# Trigger this workflow on every single git push to the main branch
+on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - 'ARCHITECTURE.md' # Avoid an infinite trigger loop when writing the doc file
+
+jobs:
+  update-docs:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Grants the workflow permission to push files back to your repo
+
+    steps:
+    # 1. Check out your code onto the automation runner machine
+    - name: Checkout Repository Code
+      uses: actions/checkout@v4
+
+    # 2. Setup standard Python environment infrastructure
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    # 3. Execute your Documentation Agent to parse the files
+    - name: Run Documentation Agent
+      run: python documentation_agent.py
+
+    # 4. Check if ARCHITECTURE.md changed, and push it back to the repo if it did
+    - name: Commit and Push Updated Documentation
+      run: |
+        git config --global user.name "github-actions[bot]"
+        git config --global user.email "41898282+github-actions[bot]@://github.com"
+        git add ARCHITECTURE.md
+        if git diff --staged --quiet; then
+          echo "No structural architecture changes detected. Skipping commit."
+        else
+          git commit -m "chore: automated ARCHITECTURE.md update [skip ci]"
+          git push
+        fi
