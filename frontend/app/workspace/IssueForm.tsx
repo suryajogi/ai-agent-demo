@@ -4,9 +4,11 @@ import { FormEvent, useState } from "react";
 
 import {
   apiPost,
+  apiPut,
   Control,
   ISSUE_PRIORITIES,
   ISSUE_SOURCES,
+  ISSUE_STATES,
   Issue,
   Risk,
 } from "@/lib/api";
@@ -16,20 +18,26 @@ import { Field, inputClass, SubmitButton } from "./ui";
 export function IssueForm({
   risks,
   controls,
-  onCreated,
+  record,
+  onSaved,
+  onCancel,
 }: {
   risks: Risk[];
   controls: Control[];
-  onCreated: (i: Issue) => void;
+  record?: Issue;
+  onSaved: (i: Issue) => void;
+  onCancel?: () => void;
 }) {
+  const isEdit = !!record;
   const [form, setForm] = useState({
-    title: "",
-    description: "",
-    source: "Manual",
-    priority: "Medium",
-    assigned_to: "",
-    risk_id: "",
-    control_id: "",
+    title: record?.title ?? "",
+    description: record?.description ?? "",
+    source: record?.source ?? "Manual",
+    priority: record?.priority ?? "Medium",
+    state: record?.state ?? "New",
+    assigned_to: record?.assigned_to ?? "",
+    risk_id: record?.risk_id != null ? String(record.risk_id) : "",
+    control_id: record?.control_id != null ? String(record.control_id) : "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,18 +47,21 @@ export function IssueForm({
     setSubmitting(true);
     setError(null);
     try {
-      const created = await apiPost<Issue>("/api/v1/issues", {
+      const payload = {
         title: form.title,
         description: form.description || null,
         source: form.source,
         priority: form.priority,
-        state: "New",
+        state: isEdit ? form.state : "New",
         assigned_to: form.assigned_to || null,
         risk_id: form.risk_id ? Number(form.risk_id) : null,
         control_id: form.control_id ? Number(form.control_id) : null,
-      });
-      onCreated(created);
-      setForm((f) => ({ ...f, title: "", description: "", assigned_to: "" }));
+      };
+      const saved = isEdit
+        ? await apiPut<Issue>(`/api/v1/issues/${record!.id}`, payload)
+        : await apiPost<Issue>("/api/v1/issues", payload);
+      onSaved(saved);
+      if (!isEdit) setForm((f) => ({ ...f, title: "", description: "", assigned_to: "" }));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -101,6 +112,21 @@ export function IssueForm({
           ))}
         </select>
       </Field>
+      {isEdit && (
+        <Field label="State">
+          <select
+            className={inputClass}
+            value={form.state}
+            onChange={(e) => setForm({ ...form, state: e.target.value })}
+          >
+            {ISSUE_STATES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <Field label="Related Risk">
         <select
           className={inputClass}
@@ -140,8 +166,15 @@ export function IssueForm({
         </Field>
       </div>
       {error && <p className="sm:col-span-2 text-sm text-red-600">{error}</p>}
-      <div className="sm:col-span-2">
-        <SubmitButton disabled={submitting}>{submitting ? "Creating…" : "Log Issue"}</SubmitButton>
+      <div className="flex items-center gap-3 sm:col-span-2">
+        <SubmitButton disabled={submitting}>
+          {submitting ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save Changes" : "Log Issue"}
+        </SubmitButton>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="text-sm text-zinc-500 hover:underline">
+            Cancel
+          </button>
+        )}
       </div>
     </form>
   );

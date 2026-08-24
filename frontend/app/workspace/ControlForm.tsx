@@ -2,25 +2,30 @@
 
 import { FormEvent, useState } from "react";
 
-import { apiPost, CONTROL_STATUSES, Control, Entity, Risk } from "@/lib/api";
+import { apiPost, apiPut, CONTROL_STATUSES, Control, Entity, Risk } from "@/lib/api";
 
 import { Field, inputClass, SubmitButton } from "./ui";
 
 export function ControlForm({
   entities,
   risks,
-  onCreated,
+  record,
+  onSaved,
+  onCancel,
 }: {
   entities: Entity[];
   risks: Risk[];
-  onCreated: (c: Control) => void;
+  record?: Control;
+  onSaved: (c: Control) => void;
+  onCancel?: () => void;
 }) {
+  const isEdit = !!record;
   const [form, setForm] = useState({
-    name: "",
-    description: "",
-    status: "Draft",
-    entity_id: "",
-    risk_id: "",
+    name: record?.name ?? "",
+    description: record?.description ?? "",
+    status: record?.status ?? "Draft",
+    entity_id: record?.entity_id != null ? String(record.entity_id) : "",
+    risk_id: record?.risk_id != null ? String(record.risk_id) : "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,15 +35,18 @@ export function ControlForm({
     setSubmitting(true);
     setError(null);
     try {
-      const created = await apiPost<Control>("/api/v1/controls", {
+      const payload = {
         name: form.name,
         description: form.description || null,
         status: form.status,
         entity_id: form.entity_id ? Number(form.entity_id) : null,
         risk_id: form.risk_id ? Number(form.risk_id) : null,
-      });
-      onCreated(created);
-      setForm((f) => ({ ...f, name: "", description: "" }));
+      };
+      const saved = isEdit
+        ? await apiPut<Control>(`/api/v1/controls/${record!.id}`, payload)
+        : await apiPost<Control>("/api/v1/controls", payload);
+      onSaved(saved);
+      if (!isEdit) setForm((f) => ({ ...f, name: "", description: "" }));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -108,10 +116,15 @@ export function ControlForm({
         </Field>
       </div>
       {error && <p className="sm:col-span-2 text-sm text-red-600">{error}</p>}
-      <div className="sm:col-span-2">
+      <div className="flex items-center gap-3 sm:col-span-2">
         <SubmitButton disabled={submitting}>
-          {submitting ? "Creating…" : "Create Control"}
+          {submitting ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save Changes" : "Create Control"}
         </SubmitButton>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="text-sm text-zinc-500 hover:underline">
+            Cancel
+          </button>
+        )}
       </div>
     </form>
   );

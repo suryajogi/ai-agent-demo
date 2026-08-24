@@ -2,24 +2,37 @@
 
 import { FormEvent, useState } from "react";
 
-import { apiPost, AssessmentTemplate, Risk, RiskAssessment } from "@/lib/api";
+import {
+  apiPost,
+  apiPut,
+  ASSESSMENT_STATES,
+  AssessmentTemplate,
+  Risk,
+  RiskAssessment,
+} from "@/lib/api";
 
 import { Field, inputClass, SubmitButton } from "./ui";
 
 export function AssessmentLauncherForm({
   risks,
   templates,
-  onCreated,
+  record,
+  onSaved,
+  onCancel,
 }: {
   risks: Risk[];
   templates: AssessmentTemplate[];
-  onCreated: (a: RiskAssessment) => void;
+  record?: RiskAssessment;
+  onSaved: (a: RiskAssessment) => void;
+  onCancel?: () => void;
 }) {
+  const isEdit = !!record;
   const [form, setForm] = useState({
-    risk_id: "",
-    assessor_id: "",
-    template_id: templates[0] ? String(templates[0].id) : "",
-    comments: "",
+    risk_id: record?.risk_id != null ? String(record.risk_id) : "",
+    assessor_id: record?.assessor_id ?? "",
+    template_id: record?.template_id != null ? String(record.template_id) : templates[0] ? String(templates[0].id) : "",
+    state: record?.state ?? "Not Started",
+    comments: record?.comments ?? "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -29,15 +42,18 @@ export function AssessmentLauncherForm({
     setSubmitting(true);
     setError(null);
     try {
-      const created = await apiPost<RiskAssessment>("/api/v1/risk-assessments", {
+      const payload = {
         risk_id: form.risk_id ? Number(form.risk_id) : null,
         assessor_id: form.assessor_id || null,
         template_id: form.template_id ? Number(form.template_id) : null,
-        state: "Not Started",
+        state: isEdit ? form.state : "Not Started",
         comments: form.comments || null,
-      });
-      onCreated(created);
-      setForm((f) => ({ ...f, assessor_id: "", comments: "" }));
+      };
+      const saved = isEdit
+        ? await apiPut<RiskAssessment>(`/api/v1/risk-assessments/${record!.id}`, payload)
+        : await apiPost<RiskAssessment>("/api/v1/risk-assessments", payload);
+      onSaved(saved);
+      if (!isEdit) setForm((f) => ({ ...f, assessor_id: "", comments: "" }));
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -84,6 +100,21 @@ export function AssessmentLauncherForm({
           ))}
         </select>
       </Field>
+      {isEdit && (
+        <Field label="State">
+          <select
+            className={inputClass}
+            value={form.state}
+            onChange={(e) => setForm({ ...form, state: e.target.value })}
+          >
+            {ASSESSMENT_STATES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        </Field>
+      )}
       <Field label="Comments">
         <input
           className={inputClass}
@@ -92,10 +123,21 @@ export function AssessmentLauncherForm({
         />
       </Field>
       {error && <p className="sm:col-span-2 text-sm text-red-600">{error}</p>}
-      <div className="sm:col-span-2">
+      <div className="flex items-center gap-3 sm:col-span-2">
         <SubmitButton disabled={submitting}>
-          {submitting ? "Launching…" : "Launch Risk Assessment"}
+          {submitting
+            ? isEdit
+              ? "Saving…"
+              : "Launching…"
+            : isEdit
+              ? "Save Changes"
+              : "Launch Risk Assessment"}
         </SubmitButton>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="text-sm text-zinc-500 hover:underline">
+            Cancel
+          </button>
+        )}
       </div>
     </form>
   );

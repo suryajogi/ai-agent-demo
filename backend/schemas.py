@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
 from pydantic import BaseModel, ConfigDict
@@ -6,6 +6,30 @@ from pydantic import BaseModel, ConfigDict
 
 class ORMBase(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Identity (users & roles) -------------------------------------------------
+
+
+class RoleCreate(BaseModel):
+    name: str
+    description: Optional[str] = None
+
+
+class RoleRead(RoleCreate, ORMBase):
+    id: int
+
+
+class UserCreate(BaseModel):
+    username: str
+    display_name: Optional[str] = None
+    email: Optional[str] = None
+    role_id: Optional[int] = None
+    active: bool = True
+
+
+class UserRead(UserCreate, ORMBase):
+    id: int
 
 
 # --- Departments / Entities --------------------------------------------------
@@ -165,6 +189,19 @@ class IssueRead(IssueCreate, ORMBase):
     id: int
 
 
+class RiskMitigationCreate(BaseModel):
+    risk_id: Optional[int] = None
+    control_id: Optional[int] = None
+    description: str
+    status: str = "Planned"
+    owner: Optional[str] = None
+    target_date: Optional[date] = None
+
+
+class RiskMitigationRead(RiskMitigationCreate, ORMBase):
+    id: int
+
+
 # --- Assessment engine structures ----------------------------------------------
 
 
@@ -172,6 +209,7 @@ class AssessmentTemplateCreate(BaseModel):
     name: str
     description: Optional[str] = None
     metric_type: str = "Qualitative"
+    scoring_method: str = "Weighted Average"
 
 
 class AssessmentTemplateRead(AssessmentTemplateCreate, ORMBase):
@@ -181,10 +219,24 @@ class AssessmentTemplateRead(AssessmentTemplateCreate, ORMBase):
 class AssessmentQuestionCreate(BaseModel):
     template_id: Optional[int] = None
     question_text: str
+    question_type: str = "Scale"
+    sequence: int = 1
+    required: bool = True
     weight: float = 1.0
 
 
 class AssessmentQuestionRead(AssessmentQuestionCreate, ORMBase):
+    id: int
+
+
+class AssessmentOptionCreate(BaseModel):
+    question_id: Optional[int] = None
+    label: str
+    score: int
+    sequence: int = 1
+
+
+class AssessmentOptionRead(AssessmentOptionCreate, ORMBase):
     id: int
 
 
@@ -237,6 +289,23 @@ class SimulationResponse(BaseModel):
     failed_count: int
     issues_created: int
     results: list[SimulationTestResult]
+
+
+# --- Audit trail -------------------------------------------------------------
+
+
+class AuditLogRead(BaseModel):
+    id: int
+    table_name: str
+    record_id: int
+    action: str
+    field_name: Optional[str] = None
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    changed_by: Optional[str] = None
+    changed_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Reporting -------------------------------------------------------------

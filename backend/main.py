@@ -102,21 +102,46 @@ def build_crud_router(
         return item
 
     @router.put("/{item_id}", response_model=read_schema)
-    def update_item(item_id: int, payload: create_schema, db: Session = Depends(get_db)) -> Any:  # type: ignore[valid-type]
+    def update_item(
+        item_id: int, payload: create_schema, request: Request, db: Session = Depends(get_db)  # type: ignore[valid-type]
+    ) -> Any:
         item = db.get(model, item_id)
         if item is None:
             raise HTTPException(status_code=404, detail=f"{resource} {item_id} not found")
+        changed_by = request.headers.get("X-User", "system")
         for field, value in payload.model_dump().items():
+            old_value = getattr(item, field, None)
+            if old_value != value:
+                db.add(
+                    models.AuditLog(
+                        table_name=model.__tablename__,
+                        record_id=item_id,
+                        action="updated",
+                        field_name=field,
+                        old_value=str(old_value) if old_value is not None else None,
+                        new_value=str(value) if value is not None else None,
+                        changed_by=changed_by,
+                    )
+                )
             setattr(item, field, value)
         db.commit()
         db.refresh(item)
         return item
 
     @router.delete("/{item_id}", status_code=204)
-    def delete_item(item_id: int, db: Session = Depends(get_db)) -> None:
+    def delete_item(item_id: int, request: Request, db: Session = Depends(get_db)) -> None:
         item = db.get(model, item_id)
         if item is None:
             raise HTTPException(status_code=404, detail=f"{resource} {item_id} not found")
+        changed_by = request.headers.get("X-User", "system")
+        db.add(
+            models.AuditLog(
+                table_name=model.__tablename__,
+                record_id=item_id,
+                action="deleted",
+                changed_by=changed_by,
+            )
+        )
         db.delete(item)
         db.commit()
         return None
@@ -125,6 +150,8 @@ def build_crud_router(
 
 
 CRUD_RESOURCES = [
+    dict(model=models.Role, create_schema=schemas.RoleCreate, read_schema=schemas.RoleRead, prefix="/api/v1/roles", tag="roles"),
+    dict(model=models.User, create_schema=schemas.UserCreate, read_schema=schemas.UserRead, prefix="/api/v1/users", tag="users"),
     dict(model=models.Department, create_schema=schemas.DepartmentCreate, read_schema=schemas.DepartmentRead, prefix="/api/v1/departments", tag="departments"),
     dict(model=models.Entity, create_schema=schemas.EntityCreate, read_schema=schemas.EntityRead, prefix="/api/v1/entities", tag="entities"),
     dict(model=models.RiskScope, create_schema=schemas.RiskScopeCreate, read_schema=schemas.RiskScopeRead, prefix="/api/v1/risk-scopes", tag="risk-scopes"),
@@ -137,8 +164,10 @@ CRUD_RESOURCES = [
     dict(model=models.Project, create_schema=schemas.ProjectCreate, read_schema=schemas.ProjectRead, prefix="/api/v1/projects", tag="projects"),
     dict(model=models.Control, create_schema=schemas.ControlCreate, read_schema=schemas.ControlRead, prefix="/api/v1/controls", tag="controls"),
     dict(model=models.Issue, create_schema=schemas.IssueCreate, read_schema=schemas.IssueRead, prefix="/api/v1/issues", tag="issues"),
+    dict(model=models.RiskMitigation, create_schema=schemas.RiskMitigationCreate, read_schema=schemas.RiskMitigationRead, prefix="/api/v1/risk-mitigations", tag="risk-mitigations"),
     dict(model=models.AssessmentTemplate, create_schema=schemas.AssessmentTemplateCreate, read_schema=schemas.AssessmentTemplateRead, prefix="/api/v1/assessment-templates", tag="assessment-templates"),
     dict(model=models.AssessmentQuestion, create_schema=schemas.AssessmentQuestionCreate, read_schema=schemas.AssessmentQuestionRead, prefix="/api/v1/assessment-questions", tag="assessment-questions"),
+    dict(model=models.AssessmentOption, create_schema=schemas.AssessmentOptionCreate, read_schema=schemas.AssessmentOptionRead, prefix="/api/v1/assessment-options", tag="assessment-options"),
     dict(model=models.AssessmentResponse, create_schema=schemas.AssessmentResponseCreate, read_schema=schemas.AssessmentResponseRead, prefix="/api/v1/assessment-responses", tag="assessment-responses"),
 ]
 
@@ -354,3 +383,31 @@ def dashboard_stats(db: Session = Depends(get_db)) -> dict[str, int]:
         "activeControls": active_controls,
         "pendingAssessments": pending_assessments,
     }
+
+
+# ---------------------------------------------------------------------------
+# Audit trail (read-only — rows are written automatically by the CRUD router
+# whenever a tracked resource is updated or deleted)
+# ---------------------------------------------------------------------------
+
+
+@app.get(
+    "/api/v1/audit-logs",
+    response_model=list[schemas.AuditLogRead],
+    tags=["audit-logs"],
+)
+def list_audit_logs(
+    table_name: str | None = None,
+    record_id: int | None = None,
+    skip: int = 0,
+    limit: int = 200,
+    db: Session = Depends(get_db),
+) -> list[Any]:
+    query = db.query(models.AuditLog)
+    if table_name:
+        query = query.filter(models.AuditLog.table_name == table_name)
+    if record_id is not None:
+        query = query.filter(models.AuditLog.record_id == record_id)
+    return (
+        query.order_by(models.AuditLog.changed_at.desc()).offset(skip).limit(limit).all()
+    )

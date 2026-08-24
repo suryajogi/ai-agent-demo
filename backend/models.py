@@ -1,10 +1,36 @@
-from datetime import date
+from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Date, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
+
+
+# --- 0. Identity (users & roles) --------------------------------------------
+
+
+class Role(Base):
+    __tablename__ = "roles"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    description: Mapped[Optional[str]] = mapped_column(String)
+
+    users: Mapped[list["User"]] = relationship(back_populates="role")
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    username: Mapped[str] = mapped_column(String, nullable=False, unique=True)
+    display_name: Mapped[Optional[str]] = mapped_column(String)
+    email: Mapped[Optional[str]] = mapped_column(String)
+    role_id: Mapped[Optional[int]] = mapped_column(ForeignKey("roles.id"))
+    active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    role: Mapped[Optional["Role"]] = relationship(back_populates="users")
 
 
 # --- 1. Core Organizational Structure -------------------------------------
@@ -105,6 +131,7 @@ class Risk(Base):
     tasks: Mapped[list["RiskTask"]] = relationship(back_populates="parent_risk")
     controls: Mapped[list["Control"]] = relationship(back_populates="risk")
     issues: Mapped[list["Issue"]] = relationship(back_populates="risk")
+    mitigations: Mapped[list["RiskMitigation"]] = relationship(back_populates="risk")
 
 
 # --- 3. Execution & Operations ----------------------------------------------
@@ -188,6 +215,21 @@ class Issue(Base):
     control: Mapped[Optional["Control"]] = relationship(back_populates="issues")
 
 
+class RiskMitigation(Base):
+    __tablename__ = "risk_mitigations"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    risk_id: Mapped[Optional[int]] = mapped_column(ForeignKey("risks.id"))
+    control_id: Mapped[Optional[int]] = mapped_column(ForeignKey("controls.id"))
+    description: Mapped[str] = mapped_column(String, nullable=False)
+    status: Mapped[str] = mapped_column(String, default="Planned")  # Planned, In Progress, Implemented, Verified
+    owner: Mapped[Optional[str]] = mapped_column(String)
+    target_date: Mapped[Optional[date]] = mapped_column(Date)
+
+    risk: Mapped[Optional["Risk"]] = relationship(back_populates="mitigations")
+    control: Mapped[Optional["Control"]] = relationship()
+
+
 # --- 5. Assessment Engine Structures -----------------------------------------
 
 
@@ -198,6 +240,7 @@ class AssessmentTemplate(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     description: Mapped[Optional[str]] = mapped_column(String)
     metric_type: Mapped[str] = mapped_column(String, default="Qualitative")
+    scoring_method: Mapped[str] = mapped_column(String, default="Weighted Average")
 
     questions: Mapped[list["AssessmentQuestion"]] = relationship(
         back_populates="template", cascade="all, delete-orphan"
@@ -211,10 +254,28 @@ class AssessmentQuestion(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     template_id: Mapped[Optional[int]] = mapped_column(ForeignKey("assessment_templates.id"))
     question_text: Mapped[str] = mapped_column(String, nullable=False)
+    question_type: Mapped[str] = mapped_column(String, default="Scale")  # Scale, MultipleChoice, YesNo
+    sequence: Mapped[int] = mapped_column(Integer, default=1)
+    required: Mapped[bool] = mapped_column(Boolean, default=True)
     weight: Mapped[float] = mapped_column(Float, default=1.0)
 
     template: Mapped[Optional["AssessmentTemplate"]] = relationship(back_populates="questions")
     responses: Mapped[list["AssessmentResponse"]] = relationship(back_populates="question")
+    options: Mapped[list["AssessmentOption"]] = relationship(
+        back_populates="question", cascade="all, delete-orphan"
+    )
+
+
+class AssessmentOption(Base):
+    __tablename__ = "assessment_options"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    question_id: Mapped[Optional[int]] = mapped_column(ForeignKey("assessment_questions.id"))
+    label: Mapped[str] = mapped_column(String, nullable=False)
+    score: Mapped[int] = mapped_column(Integer)  # points this choice contributes to the response scale
+    sequence: Mapped[int] = mapped_column(Integer, default=1)
+
+    question: Mapped[Optional["AssessmentQuestion"]] = relationship(back_populates="options")
 
 
 class AssessmentResponse(Base):
@@ -228,3 +289,20 @@ class AssessmentResponse(Base):
 
     assessment: Mapped[Optional["RiskAssessment"]] = relationship(back_populates="responses")
     question: Mapped[Optional["AssessmentQuestion"]] = relationship(back_populates="responses")
+
+
+# --- 6. Audit Trail -----------------------------------------------------------
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    table_name: Mapped[str] = mapped_column(String, nullable=False)
+    record_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    action: Mapped[str] = mapped_column(String, nullable=False)  # created, updated, deleted
+    field_name: Mapped[Optional[str]] = mapped_column(String)
+    old_value: Mapped[Optional[str]] = mapped_column(String)
+    new_value: Mapped[Optional[str]] = mapped_column(String)
+    changed_by: Mapped[Optional[str]] = mapped_column(String)
+    changed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

@@ -1,6 +1,24 @@
 import random
 from datetime import datetime, timedelta
-from models import Base, Department, Entity, RiskScope, RiskMethodology, RiskFramework, RiskStatement, Risk, Control, Issue, AssessmentTemplate, RiskAssessment
+from models import (
+    AssessmentOption,
+    AssessmentQuestion,
+    AssessmentTemplate,
+    Base,
+    Control,
+    Department,
+    Entity,
+    Issue,
+    Risk,
+    RiskAssessment,
+    RiskFramework,
+    RiskMethodology,
+    RiskMitigation,
+    RiskScope,
+    RiskStatement,
+    Role,
+    User,
+)
 from database import engine
 Base.metadata.drop_all(engine)
 Base.metadata.create_all(engine)
@@ -10,6 +28,25 @@ Session = sessionmaker(bind=engine)
 session = Session()
 
 print("🌱 Seeding 50 rows per table for ServiceNow GRC modules...")
+
+# 0. Roles & Users
+role_names = ["Risk Owner", "Assessor", "Compliance Manager", "Auditor", "Administrator"]
+roles = [Role(name=name, description=f"{name} role within the GRC workspace.") for name in role_names]
+session.add_all(roles)
+session.commit()
+
+users = [
+    User(
+        username=f"user.{i:03d}",
+        display_name=f"GRC User {i}",
+        email=f"user.{i:03d}@example.com",
+        role_id=random.choice(roles).id,
+        active=random.random() > 0.1,
+    )
+    for i in range(1, 21)
+]
+session.add_all(users)
+session.commit()
 
 # 1. Departments (10 distinct departments)
 dept_names = ["Information Technology", "Cybersecurity", "Finance & Accounting", "Human Resources", "Legal & Compliance", "Operations", "Product Engineering", "Global Supply Chain", "Sales & Marketing", "Customer Success"]
@@ -82,6 +119,7 @@ session.commit()
 
 # 6. Controls (Create exactly 50 mitigation controls linked to risks)
 control_statuses = ["Draft", "Attest", "Review", "Monitor"]
+controls = []
 for i in range(1, 51):
     c = Control(
         name=f"CTRL-{300+i}: Multi-Factor Authentication & Audit Logging System",
@@ -90,7 +128,22 @@ for i in range(1, 51):
         entity_id=random.choice(entities).id,
         risk_id=random.choice(risks).id if random.random() > 0.3 else None
     )
+    controls.append(c)
     session.add(c)
+session.commit()
+
+# 6b. Risk Mitigations (remediation actions tied to risks/controls)
+mitigation_statuses = ["Planned", "In Progress", "Implemented", "Verified"]
+for i in range(1, 16):
+    m = RiskMitigation(
+        risk_id=random.choice(risks).id,
+        control_id=random.choice(controls).id if random.random() > 0.3 else None,
+        description=f"Remediation action MIT-{i}: harden configuration and verify control effectiveness.",
+        status=random.choice(mitigation_statuses),
+        owner=f"OWNER-{500+i}",
+        target_date=datetime.now().date() + timedelta(days=random.randint(7, 90)),
+    )
+    session.add(m)
 
 # 7. Issues (Create exactly 50 deficiency incidents)
 issue_sources = ["Risk Assessment", "Control Failure", "Manual Entry"]
@@ -107,12 +160,54 @@ for i in range(1, 51):
     )
     session.add(iss)
 
-# 8. Assessments (Create exactly 50 active assessment metrics)
+# 8. Assessment Methodology (configurable template with scored answer options)
+template = AssessmentTemplate(
+    name="Standard Qualitative Risk Questionnaire",
+    description="Baseline methodology used to assess likelihood and impact controls for a risk.",
+    metric_type="Qualitative",
+    scoring_method="Weighted Average",
+)
+session.add(template)
+session.commit()
+
+question_defs = [
+    ("Is the control operating as designed?", 1.5),
+    ("Is evidence of control execution available and current?", 1.0),
+    ("Has the control been tested in the last 12 months?", 1.0),
+    ("Are exceptions to this control tracked and remediated?", 1.2),
+    ("Does management have visibility into control performance?", 0.8),
+]
+option_labels = [
+    ("Strongly Disagree", 1),
+    ("Disagree", 2),
+    ("Neutral", 3),
+    ("Agree", 4),
+    ("Strongly Agree", 5),
+]
+questions = []
+for seq, (text, weight) in enumerate(question_defs, start=1):
+    q = AssessmentQuestion(
+        template_id=template.id,
+        question_text=text,
+        question_type="Scale",
+        sequence=seq,
+        required=True,
+        weight=weight,
+    )
+    session.add(q)
+    session.flush()
+    questions.append(q)
+    for opt_seq, (label, score) in enumerate(option_labels, start=1):
+        session.add(AssessmentOption(question_id=q.id, label=label, score=score, sequence=opt_seq))
+session.commit()
+
+# 9. Assessments (Create exactly 50 active assessment metrics)
 assessment_states = ["Not Started", "In Progress", "Completed"]
 for i in range(1, 51):
     asst = RiskAssessment(
         risk_id=random.choice(risks).id,
         assessor_id=f"ASSESSOR-{900+i}",
+        template_id=template.id,
         state=random.choice(assessment_states),
         score=random.randint(5, 25),
         comments="Automatic baseline generation matching ServiceNow matrix models."

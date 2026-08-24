@@ -1,6 +1,6 @@
 "use client";
 
-import { ReactNode } from "react";
+import { ReactNode, useState } from "react";
 
 export function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -50,10 +50,12 @@ export function DataTable<T extends { id: number }>({
   rows,
   columns,
   onDelete,
+  onRowClick,
 }: {
   rows: T[];
   columns: Column<T>[];
   onDelete?: (id: number) => void;
+  onRowClick?: (row: T) => void;
 }) {
   return (
     <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
@@ -70,7 +72,13 @@ export function DataTable<T extends { id: number }>({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={row.id} className="border-t border-zinc-100 dark:border-zinc-800">
+            <tr
+              key={row.id}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+              className={`border-t border-zinc-100 dark:border-zinc-800 ${
+                onRowClick ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900" : ""
+              }`}
+            >
               {columns.map((c) => (
                 <td key={c.header} className="px-3 py-2">
                   {c.render(row)}
@@ -79,7 +87,10 @@ export function DataTable<T extends { id: number }>({
               {onDelete && (
                 <td className="px-3 py-2 text-right">
                   <button
-                    onClick={() => onDelete(row.id)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onDelete(row.id);
+                    }}
                     className="text-red-600 hover:underline dark:text-red-400"
                   >
                     Delete
@@ -101,5 +112,95 @@ export function DataTable<T extends { id: number }>({
         </tbody>
       </table>
     </div>
+  );
+}
+
+// --- Record view/edit modal ---------------------------------------------------
+
+export function Modal({
+  title,
+  onClose,
+  children,
+}: {
+  title: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-xl border border-zinc-200 bg-white p-6 shadow-lg dark:border-zinc-800 dark:bg-zinc-950"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"
+          >
+            ✕
+          </button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+export function ReadField({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1 text-sm">
+      <span className="font-medium text-zinc-500">{label}</span>
+      <span className="text-zinc-900 dark:text-zinc-100">
+        {value === null || value === undefined || value === "" ? "—" : value}
+      </span>
+    </div>
+  );
+}
+
+export function DetailModal<T>({
+  title,
+  record,
+  onClose,
+  onSaved,
+  renderView,
+  renderEdit,
+}: {
+  title: string;
+  record: T;
+  onClose: () => void;
+  onSaved: (updated: T) => void;
+  renderView: (record: T) => ReactNode;
+  renderEdit: (record: T, onSaved: (updated: T) => void, onCancel: () => void) => ReactNode;
+}) {
+  const [editing, setEditing] = useState(false);
+
+  function handleSaved(updated: T) {
+    onSaved(updated);
+    onClose();
+  }
+
+  return (
+    <Modal title={title} onClose={onClose}>
+      {editing ? (
+        renderEdit(record, handleSaved, () => setEditing(false))
+      ) : (
+        <div className="grid gap-4">
+          <div className="grid gap-3 sm:grid-cols-2">{renderView(record)}</div>
+          <div>
+            <button
+              onClick={() => setEditing(true)}
+              className="rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }

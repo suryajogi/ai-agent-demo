@@ -22,7 +22,7 @@ import { DepartmentForm } from "./DepartmentForm";
 import { IssueForm } from "./IssueForm";
 import { HeatmapFilter, RiskHeatmap } from "./RiskHeatmap";
 import { RiskForm } from "./RiskForm";
-import { Card, DataTable } from "./ui";
+import { Card, DataTable, DetailModal, ReadField } from "./ui";
 
 type Tab = "risks" | "controls" | "issues" | "departments" | "assessments";
 
@@ -56,6 +56,12 @@ export default function WorkspacePage() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [assessments, setAssessments] = useState<RiskAssessment[]>([]);
   const [templates, setTemplates] = useState<AssessmentTemplate[]>([]);
+
+  const [viewingRisk, setViewingRisk] = useState<Risk | null>(null);
+  const [viewingControl, setViewingControl] = useState<Control | null>(null);
+  const [viewingIssue, setViewingIssue] = useState<Issue | null>(null);
+  const [viewingDepartment, setViewingDepartment] = useState<Department | null>(null);
+  const [viewingAssessment, setViewingAssessment] = useState<RiskAssessment | null>(null);
 
   function reload() {
     Promise.all([
@@ -155,7 +161,7 @@ export default function WorkspacePage() {
       {tab === "risks" && (
         <div className="grid gap-6">
           <Card title="Create Risk">
-            <RiskForm entities={entities} onCreated={(r) => setRisks((prev) => [...prev, r])} />
+            <RiskForm entities={entities} onSaved={(r) => setRisks((prev) => [...prev, r])} />
           </Card>
           <Card title="Heatmap Matrix">
             <RiskHeatmap risks={risks} selected={heatmapFilter} onSelectCell={setHeatmapFilter} />
@@ -169,6 +175,7 @@ export default function WorkspacePage() {
           >
             <DataTable
               rows={filteredRisks}
+              onRowClick={(r) => setViewingRisk(r)}
               onDelete={async (id) => {
                 await apiDelete(`/api/v1/risks/${id}`);
                 setRisks((prev) => prev.filter((r) => r.id !== id));
@@ -204,12 +211,13 @@ export default function WorkspacePage() {
             <ControlForm
               entities={entities}
               risks={risks}
-              onCreated={(c) => setControls((prev) => [...prev, c])}
+              onSaved={(c) => setControls((prev) => [...prev, c])}
             />
           </Card>
           <Card title={`Controls (${controls.length})`}>
             <DataTable
               rows={controls}
+              onRowClick={(c) => setViewingControl(c)}
               onDelete={async (id) => {
                 await apiDelete(`/api/v1/controls/${id}`);
                 setControls((prev) => prev.filter((c) => c.id !== id));
@@ -231,12 +239,13 @@ export default function WorkspacePage() {
             <IssueForm
               risks={risks}
               controls={controls}
-              onCreated={(i) => setIssues((prev) => [...prev, i])}
+              onSaved={(i) => setIssues((prev) => [...prev, i])}
             />
           </Card>
           <Card title={`Issues (${issues.length})`}>
             <DataTable
               rows={issues}
+              onRowClick={(i) => setViewingIssue(i)}
               onDelete={async (id) => {
                 await apiDelete(`/api/v1/issues/${id}`);
                 setIssues((prev) => prev.filter((i) => i.id !== id));
@@ -257,11 +266,12 @@ export default function WorkspacePage() {
       {tab === "departments" && (
         <div className="grid gap-6">
           <Card title="Create Department">
-            <DepartmentForm onCreated={(d) => setDepartments((prev) => [...prev, d])} />
+            <DepartmentForm onSaved={(d) => setDepartments((prev) => [...prev, d])} />
           </Card>
           <Card title={`Departments (${departments.length})`}>
             <DataTable
               rows={departments}
+              onRowClick={(d) => setViewingDepartment(d)}
               onDelete={async (id) => {
                 await apiDelete(`/api/v1/departments/${id}`);
                 setDepartments((prev) => prev.filter((d) => d.id !== id));
@@ -282,12 +292,13 @@ export default function WorkspacePage() {
             <AssessmentLauncherForm
               risks={risks}
               templates={templates}
-              onCreated={(a) => setAssessments((prev) => [...prev, a])}
+              onSaved={(a) => setAssessments((prev) => [...prev, a])}
             />
           </Card>
           <Card title={`Assessments (${assessments.length})`}>
             <DataTable
               rows={assessments}
+              onRowClick={(a) => setViewingAssessment(a)}
               columns={[
                 { header: "Risk", render: (a) => riskName(a.risk_id) },
                 { header: "Assessor", render: (a) => a.assessor_id ?? "—" },
@@ -297,6 +308,152 @@ export default function WorkspacePage() {
             />
           </Card>
         </div>
+      )}
+
+      {viewingRisk && (
+        <DetailModal
+          title={`Risk: ${viewingRisk.name}`}
+          record={viewingRisk}
+          onClose={() => setViewingRisk(null)}
+          onSaved={(updated) =>
+            setRisks((prev) => prev.map((r) => (r.id === updated.id ? updated : r)))
+          }
+          renderView={(r) => (
+            <>
+              <ReadField label="Name" value={r.name} />
+              <ReadField label="Entity" value={entityName(r.entity_id)} />
+              <ReadField label="State" value={r.state} />
+              <ReadField label="Assigned To" value={r.assigned_to} />
+              <ReadField label="Inherent Likelihood" value={r.inherent_likelihood} />
+              <ReadField label="Inherent Impact" value={r.inherent_impact} />
+              <ReadField label="Residual Likelihood" value={r.residual_likelihood} />
+              <ReadField label="Residual Impact" value={r.residual_impact} />
+              <div className="sm:col-span-2">
+                <ReadField label="Description" value={r.description} />
+              </div>
+            </>
+          )}
+          renderEdit={(r, onSaved, onCancel) => (
+            <RiskForm entities={entities} record={r} onSaved={onSaved} onCancel={onCancel} />
+          )}
+        />
+      )}
+
+      {viewingControl && (
+        <DetailModal
+          title={`Control: ${viewingControl.name}`}
+          record={viewingControl}
+          onClose={() => setViewingControl(null)}
+          onSaved={(updated) =>
+            setControls((prev) => prev.map((c) => (c.id === updated.id ? updated : c)))
+          }
+          renderView={(c) => (
+            <>
+              <ReadField label="Name" value={c.name} />
+              <ReadField label="Status" value={c.status} />
+              <ReadField label="Entity" value={entityName(c.entity_id)} />
+              <ReadField label="Mitigates Risk" value={riskName(c.risk_id)} />
+              <div className="sm:col-span-2">
+                <ReadField label="Description" value={c.description} />
+              </div>
+            </>
+          )}
+          renderEdit={(c, onSaved, onCancel) => (
+            <ControlForm
+              entities={entities}
+              risks={risks}
+              record={c}
+              onSaved={onSaved}
+              onCancel={onCancel}
+            />
+          )}
+        />
+      )}
+
+      {viewingIssue && (
+        <DetailModal
+          title={`Issue: ${viewingIssue.title}`}
+          record={viewingIssue}
+          onClose={() => setViewingIssue(null)}
+          onSaved={(updated) =>
+            setIssues((prev) => prev.map((i) => (i.id === updated.id ? updated : i)))
+          }
+          renderView={(i) => (
+            <>
+              <ReadField label="Title" value={i.title} />
+              <ReadField label="Priority" value={i.priority} />
+              <ReadField label="State" value={i.state} />
+              <ReadField label="Source" value={i.source} />
+              <ReadField label="Assigned To" value={i.assigned_to} />
+              <ReadField label="Related Risk" value={riskName(i.risk_id)} />
+              <ReadField label="Related Control" value={controlName(i.control_id)} />
+              <div className="sm:col-span-2">
+                <ReadField label="Description" value={i.description} />
+              </div>
+            </>
+          )}
+          renderEdit={(i, onSaved, onCancel) => (
+            <IssueForm
+              risks={risks}
+              controls={controls}
+              record={i}
+              onSaved={onSaved}
+              onCancel={onCancel}
+            />
+          )}
+        />
+      )}
+
+      {viewingDepartment && (
+        <DetailModal
+          title={`Department: ${viewingDepartment.name}`}
+          record={viewingDepartment}
+          onClose={() => setViewingDepartment(null)}
+          onSaved={(updated) =>
+            setDepartments((prev) => prev.map((d) => (d.id === updated.id ? updated : d)))
+          }
+          renderView={(d) => (
+            <>
+              <ReadField label="Name" value={d.name} />
+              <ReadField label="Manager ID" value={d.manager_id} />
+              <ReadField label="Cost Center" value={d.cost_center} />
+            </>
+          )}
+          renderEdit={(d, onSaved, onCancel) => (
+            <DepartmentForm record={d} onSaved={onSaved} onCancel={onCancel} />
+          )}
+        />
+      )}
+
+      {viewingAssessment && (
+        <DetailModal
+          title={`Assessment: ${riskName(viewingAssessment.risk_id)}`}
+          record={viewingAssessment}
+          onClose={() => setViewingAssessment(null)}
+          onSaved={(updated) =>
+            setAssessments((prev) => prev.map((a) => (a.id === updated.id ? updated : a)))
+          }
+          renderView={(a) => (
+            <>
+              <ReadField label="Risk" value={riskName(a.risk_id)} />
+              <ReadField label="Assessor" value={a.assessor_id} />
+              <ReadField label="State" value={a.state} />
+              <ReadField label="Score" value={a.score} />
+              <div className="sm:col-span-2">
+                <ReadField label="Comments" value={a.comments} />
+              </div>
+            </>
+          )}
+          renderEdit={(a, onSaved, onCancel) => (
+            <AssessmentLauncherForm
+              risks={risks}
+              templates={templates}
+              record={a}
+              onSaved={onSaved}
+              onCancel={onCancel}
+            />
+          )}
+        />
       )}
     </div>
   );

@@ -1,66 +1,79 @@
 import os
 from datetime import datetime
 
+try:
+    import docx
+except ImportError:
+    print("⚠️ python-docx missing. Run: uv pip install python-docx")
+
 class ProductOwnerAgent:
     def __init__(self, root_dir):
         self.root_dir = os.path.abspath(root_dir)
+        self.docx_path = os.path.join(self.root_dir, "requirements.docx")
         self.backlog_path = os.path.join(self.root_dir, "PRODUCT_BACKLOG.md")
         
+    def extract_word_text(self):
+        """Reads the .docx file and converts paragraphs to raw string markdown format."""
+        if not os.path.exists(self.docx_path):
+            return "⚠️ Notice: 'requirements.docx' was not found in the root folder. Please place your Word document there."
+        
+        try:
+            doc = docx.Document(self.docx_path)
+            full_text = []
+            for para in doc.paragraphs:
+                if para.text.strip():
+                    # If paragraph looks like a header, make it look clean in markdown
+                    if len(para.text) < 60 and not para.text.endswith('.'):
+                        full_text.append(f"\n### {para.text}")
+                    else:
+                        full_text.append(para.text)
+            return "\n".join(full_text)
+        except Exception as e:
+            return f"❌ Failed to parse Word document: {str(e)}"
+
     def review_current_build(self):
-        """Inspects codebase layout folders to see what has been built vs what is missing."""
+        """Inspects project directory to check technical progress status."""
         has_backend = os.path.exists(os.path.join(self.root_dir, "backend"))
         has_frontend = os.path.exists(os.path.join(self.root_dir, "frontend"))
-        
-        # Look for advanced ServiceNow GRC components
-        has_matrix = False
-        if has_frontend:
-            for root, _, files in os.walk(os.path.join(self.root_dir, "frontend")):
-                for f in files:
-                    if "matrix" in f.lower() or "grid" in f.lower():
-                        has_matrix = True
-                        break
-        return {"backend": has_backend, "frontend": has_frontend, "matrix_visualizer": has_matrix}
+        return {"backend": has_backend, "frontend": has_frontend}
 
-    def formulate_new_requirements(self):
-        print("📋 Product Owner Agent: Reviewing repository build state to prioritize backlog...")
+    def merge_and_formulate(self):
+        print("📋 Product Owner Agent: Ingesting your custom Word requirements document...")
+        
+        # Extract content from your requirements.docx
+        custom_requirements = self.extract_word_text()
         state = self.review_current_build()
         
-        # Define advanced feature requirements to transform the project into a "perfect" system
-        backlog_content = f"""# 📋 ServiceNow GRC Replication: Product Backlog
-*Compiled by the AI Product Owner Agent on {datetime.now().strftime('%Y-%m-%d')}*
-
-## 🎯 Vision Statement
-Transform the lightweight local repository into a production-grade enterprise replication of ServiceNow GRC: Risk Management, ensuring complete auditable isolation between policy registries, mitigating controls, and data telemetry.
+        # Compile everything into an unified system backlog
+        backlog_content = f"""# 📋 Aligned Product Backlog & Target Vision
+*Synthesized by Product Owner Agent on {datetime.now().strftime('%Y-%m-%d')}*
 
 ---
 
-## 🛠️ Phase 2 Expansion Requirements (Assigned to Claude Code)
+## 📄 Ingested Document Requirements (From requirements.docx)
+{custom_requirements}
 
-### 📈 Requirement 1: Interactive Heatmap Matrix Grid (High Priority)
-- **Description:** Implement a color-coded 5x5 structural visual matrix mapping Likelihood (1-5 axes) vs Impact (1-5 axes) on the main dashboard view.
-- **Behavior:** Clicking a specific coordinate cell (e.g., cell [4,3] High Likelihood, Medium Impact) must dynamically filter and isolate the data table below to show only the specific risks matching those scoring weights.
+---
 
-### 🔐 Requirement 2: Audit Trait History Logging Pipeline (Medium Priority)
-- **Description:** Implement automatic mutation tracking for the `risks` database table.
-- **Behavior:** When an assessor updates a risk state from `Assess` to `Respond`, a backend hook must automatically log a timestamped tracking row into a new `audit_logs` model tracking who changed the value, when, and the historic state delta.
+## 🏗️ Architectural Compliance Analysis
+The Product Owner has checked your current local code footprint relative to the custom Word document goals:
+- **Backend Architecture Integration:** {"🟢 Existing FastAPI schemas detected." if state['backend'] else "🔴 Backend service layer missing."}
+- **Frontend Presentation Layer:** {"🟢 Next.js UI component space active." if state['frontend'] else "🔴 Next.js app scaffolding missing."}
 
-### 🤖 Requirement 3: Automated Control Testing Simulator (Medium Priority)
-- **Description:** Build an event simulator endpoint (`/api/v1/simulation/trigger-test`).
-- **Behavior:** Running this simulation randomly triggers a "Fail" or "Pass" metric against deployed mitigation controls. If a control status flips to "Fail", the engine must automatically create a new High Priority record in the `issues` database table linked to that asset.
+---
+
+## 🛠️ Refined Directive Backlog for Engineering Agent (Claude Code)
+Based directly on your Word specifications, build the following updates:
+1. Cross-reference the database tables to match any specialized data tracking columns specified in the Word document.
+2. Refine form validation boundaries on the frontend components to handle data fields accurately as outlined above.
+3. Keep the 50 mocked dataset entries per table running flawlessly to enable proper application evaluation.
 """
         with open(self.backlog_path, "w") as f:
             f.write(backlog_content)
         
-        print(f"🎯 Requirements generated successfully! Updated: {self.backlog_path}")
-        
-        # Display the handoff instruction command directly to the terminal screen
-        print("\n" + "="*80)
-        print("🤖 PRODUCT OWNER HANDOFF STATEMENT FOR CLAUDE CODE:")
-        print("="*80)
-        print("Copy and paste the exact command instruction prompt below into your `claude` terminal agent:")
-        print("\n\"Please read @PRODUCT_BACKLOG.md. Implement Requirement 1 (Interactive Heatmap Matrix Grid) on the frontend page and add the Requirement 3 Simulation endpoints into the FastAPI backend file layout.\"")
-        print("="*80 + "\n")
+        print(f"🎯 Successfully processed Word requirements! Updated: {self.backlog_path}")
+        print("\n👉 Next Step: Run `claude` in your terminal and prompt: \"Please read @PRODUCT_BACKLOG.md and adjust the project structure to match the specifications.\"")
 
 if __name__ == "__main__":
     agent = ProductOwnerAgent(os.path.expanduser("~/Desktop/ai-agent-demo"))
-    agent.formulate_new_requirements()
+    agent.merge_and_formulate()

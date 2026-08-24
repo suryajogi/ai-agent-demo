@@ -2,14 +2,23 @@
 
 import { FormEvent, useState } from "react";
 
-import { apiPost, Department } from "@/lib/api";
+import { apiPost, apiPut, Department } from "@/lib/api";
 
 import { Field, inputClass, SubmitButton } from "./ui";
 
-export function DepartmentForm({ onCreated }: { onCreated: (d: Department) => void }) {
-  const [name, setName] = useState("");
-  const [managerId, setManagerId] = useState("");
-  const [costCenter, setCostCenter] = useState("");
+export function DepartmentForm({
+  record,
+  onSaved,
+  onCancel,
+}: {
+  record?: Department;
+  onSaved: (d: Department) => void;
+  onCancel?: () => void;
+}) {
+  const isEdit = !!record;
+  const [name, setName] = useState(record?.name ?? "");
+  const [managerId, setManagerId] = useState(record?.manager_id ?? "");
+  const [costCenter, setCostCenter] = useState(record?.cost_center ?? "");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -18,15 +27,20 @@ export function DepartmentForm({ onCreated }: { onCreated: (d: Department) => vo
     setSubmitting(true);
     setError(null);
     try {
-      const created = await apiPost<Department>("/api/v1/departments", {
+      const payload = {
         name,
         manager_id: managerId || null,
         cost_center: costCenter || null,
-      });
-      onCreated(created);
-      setName("");
-      setManagerId("");
-      setCostCenter("");
+      };
+      const saved = isEdit
+        ? await apiPut<Department>(`/api/v1/departments/${record!.id}`, payload)
+        : await apiPost<Department>("/api/v1/departments", payload);
+      onSaved(saved);
+      if (!isEdit) {
+        setName("");
+        setManagerId("");
+        setCostCenter("");
+      }
     } catch (err) {
       setError((err as Error).message);
     } finally {
@@ -61,10 +75,15 @@ export function DepartmentForm({ onCreated }: { onCreated: (d: Department) => vo
         />
       </Field>
       {error && <p className="sm:col-span-3 text-sm text-red-600">{error}</p>}
-      <div className="sm:col-span-3">
+      <div className="flex items-center gap-3 sm:col-span-3">
         <SubmitButton disabled={submitting}>
-          {submitting ? "Creating…" : "Create Department"}
+          {submitting ? (isEdit ? "Saving…" : "Creating…") : isEdit ? "Save Changes" : "Create Department"}
         </SubmitButton>
+        {onCancel && (
+          <button type="button" onClick={onCancel} className="text-sm text-zinc-500 hover:underline">
+            Cancel
+          </button>
+        )}
       </div>
     </form>
   );
