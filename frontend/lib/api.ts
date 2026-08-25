@@ -123,6 +123,8 @@ export interface Department {
   name: string;
   manager_id: string | null;
   cost_center: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Entity {
@@ -135,6 +137,8 @@ export interface Entity {
   contract_end_date: string | null;
   criticality_tier: string | null;
   last_due_diligence_date: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Risk {
@@ -150,6 +154,8 @@ export interface Risk {
   residual_likelihood: number | null;
   residual_impact: number | null;
   breaches_appetite: boolean;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface RiskAssessment {
@@ -160,6 +166,8 @@ export interface RiskAssessment {
   state: string;
   score: number | null;
   comments: string | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Control {
@@ -171,6 +179,8 @@ export interface Control {
   risk_id: number | null;
   test_connector_type: string | null;
   test_connector_config: { url?: string; expect_status?: number } | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface Issue {
@@ -187,6 +197,8 @@ export interface Issue {
   corrective_action: string | null;
   effectiveness_check_date: string | null;
   recurrence_count: number;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface AssessmentTemplate {

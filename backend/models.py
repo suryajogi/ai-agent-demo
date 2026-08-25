@@ -46,6 +46,8 @@ class Department(Base):
     name: Mapped[str] = mapped_column(String, nullable=False)
     manager_id: Mapped[Optional[str]] = mapped_column(String)
     cost_center: Mapped[Optional[str]] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     entities: Mapped[list["Entity"]] = relationship(back_populates="department")
 
@@ -66,6 +68,8 @@ class Entity(Base):
     contract_end_date: Mapped[Optional[date]] = mapped_column(Date)
     criticality_tier: Mapped[Optional[str]] = mapped_column(String)  # Low, Medium, High, Critical
     last_due_diligence_date: Mapped[Optional[date]] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     department: Mapped[Optional["Department"]] = relationship(back_populates="entities")
     risks: Mapped[list["Risk"]] = relationship(back_populates="entity")
@@ -141,6 +145,8 @@ class Risk(Base):
     inherent_impact: Mapped[Optional[int]] = mapped_column(Integer)  # 1-5
     residual_likelihood: Mapped[Optional[int]] = mapped_column(Integer)  # 1-5
     residual_impact: Mapped[Optional[int]] = mapped_column(Integer)  # 1-5
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     statement: Mapped[Optional["RiskStatement"]] = relationship(back_populates="risks")
     entity: Mapped[Optional["Entity"]] = relationship(back_populates="risks")
@@ -164,6 +170,8 @@ class RiskAssessment(Base):
     state: Mapped[str] = mapped_column(String, default="Not Started")  # Not Started, In Progress, Completed
     score: Mapped[Optional[float]] = mapped_column(Float)
     comments: Mapped[Optional[str]] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     risk: Mapped[Optional["Risk"]] = relationship(back_populates="assessments")
     template: Mapped[Optional["AssessmentTemplate"]] = relationship(back_populates="assessments")
@@ -214,6 +222,8 @@ class Control(Base):
     # null) preserves the original random Pass/Fail demo behavior.
     test_connector_type: Mapped[Optional[str]] = mapped_column(String)  # none, http_health_check
     test_connector_config: Mapped[Optional[dict]] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     entity: Mapped[Optional["Entity"]] = relationship(back_populates="controls")
     risk: Mapped[Optional["Risk"]] = relationship(back_populates="controls")
@@ -240,6 +250,8 @@ class Issue(Base):
     corrective_action: Mapped[Optional[str]] = mapped_column(String)
     effectiveness_check_date: Mapped[Optional[date]] = mapped_column(Date)
     recurrence_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
 
     risk: Mapped[Optional["Risk"]] = relationship(back_populates="issues")
     control: Mapped[Optional["Control"]] = relationship(back_populates="issues")

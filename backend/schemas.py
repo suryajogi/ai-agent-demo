@@ -58,6 +58,8 @@ class DepartmentCreate(BaseModel):
 
 class DepartmentRead(DepartmentCreate, ORMBase):
     id: int
+    created_at: datetime
+    updated_at: datetime
 
 
 class EntityCreate(BaseModel):
@@ -73,6 +75,8 @@ class EntityCreate(BaseModel):
 
 class EntityRead(EntityCreate, ORMBase):
     id: int
+    created_at: datetime
+    updated_at: datetime
 
 
 # --- Risk registry & governance ----------------------------------------------
@@ -143,6 +147,8 @@ class RiskCreate(BaseModel):
 class RiskRead(RiskCreate, ORMBase):
     id: int
     breaches_appetite: bool = False
+    created_at: datetime
+    updated_at: datetime
 
 
 # --- Execution & operations ---------------------------------------------------
@@ -159,6 +165,8 @@ class RiskAssessmentCreate(BaseModel):
 
 class RiskAssessmentRead(RiskAssessmentCreate, ORMBase):
     id: int
+    created_at: datetime
+    updated_at: datetime
 
 
 class RiskTaskCreate(BaseModel):
@@ -201,6 +209,8 @@ class ControlCreate(BaseModel):
 
 class ControlRead(ControlCreate, ORMBase):
     id: int
+    created_at: datetime
+    updated_at: datetime
 
 
 class IssueCreate(BaseModel):
@@ -220,6 +230,8 @@ class IssueCreate(BaseModel):
 
 class IssueRead(IssueCreate, ORMBase):
     id: int
+    created_at: datetime
+    updated_at: datetime
 
 
 class RiskMitigationCreate(BaseModel):

@@ -44,6 +44,18 @@ export function Card({ title, children }: { title: string; children: ReactNode }
 interface Column<T> {
   header: string;
   render: (row: T) => ReactNode;
+  // Optional: a comparable value for this column. Presence of this makes the
+  // header clickable/sortable; omit it for columns that don't have a
+  // meaningful sort order (e.g. an action badge).
+  sortValue?: (row: T) => string | number | null;
+}
+
+function compareValues(a: string | number | null, b: string | number | null): number {
+  if (a == null && b == null) return 0;
+  if (a == null) return 1; // nulls sort last regardless of direction
+  if (b == null) return -1;
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  return String(a).localeCompare(String(b));
 }
 
 export function DataTable<T extends { id: number }>({
@@ -57,21 +69,48 @@ export function DataTable<T extends { id: number }>({
   onDelete?: (id: number) => void;
   onRowClick?: (row: T) => void;
 }) {
+  const [sort, setSort] = useState<{ header: string; direction: "asc" | "desc" } | null>(null);
+
+  function toggleSort(column: Column<T>) {
+    if (!column.sortValue) return;
+    setSort((prev) => {
+      if (!prev || prev.header !== column.header) return { header: column.header, direction: "asc" };
+      if (prev.direction === "asc") return { header: column.header, direction: "desc" };
+      return null; // third click clears sorting
+    });
+  }
+
+  const sortColumn = sort ? columns.find((c) => c.header === sort.header) : undefined;
+  const sortedRows =
+    sort && sortColumn?.sortValue
+      ? [...rows].sort((a, b) => {
+          const cmp = compareValues(sortColumn.sortValue!(a), sortColumn.sortValue!(b));
+          return sort.direction === "asc" ? cmp : -cmp;
+        })
+      : rows;
+
   return (
     <div className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
       <table className="w-full text-sm">
         <thead className="bg-zinc-50 dark:bg-zinc-900">
           <tr>
             {columns.map((c) => (
-              <th key={c.header} className="px-3 py-2 text-left font-medium text-zinc-500">
+              <th
+                key={c.header}
+                onClick={() => toggleSort(c)}
+                className={`px-3 py-2 text-left font-medium text-zinc-500 ${
+                  c.sortValue ? "cursor-pointer select-none hover:text-zinc-800 dark:hover:text-zinc-200" : ""
+                }`}
+              >
                 {c.header}
+                {sort?.header === c.header && (sort.direction === "asc" ? " ▲" : " ▼")}
               </th>
             ))}
             {onDelete && <th className="px-3 py-2" />}
           </tr>
         </thead>
         <tbody>
-          {rows.map((row) => (
+          {sortedRows.map((row) => (
             <tr
               key={row.id}
               onClick={onRowClick ? () => onRowClick(row) : undefined}

@@ -55,6 +55,10 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString();
+}
+
 function isOverdueVendor(e: Entity): boolean {
   if (e.type !== "Vendor") return false;
   const today = new Date().toISOString().slice(0, 10);
@@ -292,16 +296,18 @@ export default function WorkspacePage() {
                 apiDelete(`/api/v1/risks/${id}`).then(() => setRisks((prev) => prev.filter((r) => r.id !== id)));
               }}
               columns={[
-                { header: "Name", render: (r) => r.name },
-                { header: "Entity", render: (r) => entityName(r.entity_id) },
-                { header: "State", render: (r) => r.state },
-                { header: "Assigned To", render: (r) => r.assigned_to ?? "—" },
+                { header: "Name", render: (r) => r.name, sortValue: (r) => r.name },
+                { header: "Entity", render: (r) => entityName(r.entity_id), sortValue: (r) => entityName(r.entity_id) },
+                { header: "State", render: (r) => r.state, sortValue: (r) => r.state },
+                { header: "Assigned To", render: (r) => r.assigned_to ?? "—", sortValue: (r) => r.assigned_to },
                 {
                   header: "Inherent",
                   render: (r) =>
                     r.inherent_likelihood && r.inherent_impact
                       ? r.inherent_likelihood * r.inherent_impact
                       : "—",
+                  sortValue: (r) =>
+                    r.inherent_likelihood && r.inherent_impact ? r.inherent_likelihood * r.inherent_impact : null,
                 },
                 {
                   header: "Residual",
@@ -309,6 +315,8 @@ export default function WorkspacePage() {
                     r.residual_likelihood && r.residual_impact
                       ? r.residual_likelihood * r.residual_impact
                       : "—",
+                  sortValue: (r) =>
+                    r.residual_likelihood && r.residual_impact ? r.residual_likelihood * r.residual_impact : null,
                 },
                 {
                   header: "Appetite",
@@ -320,7 +328,10 @@ export default function WorkspacePage() {
                     ) : (
                       "—"
                     ),
+                  sortValue: (r) => (r.breaches_appetite ? 1 : 0),
                 },
+                { header: "Created", render: (r) => formatDateTime(r.created_at), sortValue: (r) => r.created_at },
+                { header: "Updated", render: (r) => formatDateTime(r.updated_at), sortValue: (r) => r.updated_at },
               ]}
             />
           </Card>
@@ -365,11 +376,13 @@ export default function WorkspacePage() {
                 apiDelete(`/api/v1/controls/${id}`).then(() => setControls((prev) => prev.filter((c) => c.id !== id)));
               }}
               columns={[
-                { header: "Name", render: (c) => c.name },
-                { header: "Status", render: (c) => c.status },
-                { header: "Entity", render: (c) => entityName(c.entity_id) },
-                { header: "Mitigates", render: (c) => riskName(c.risk_id) },
-                { header: "Connector", render: (c) => c.test_connector_type ?? "—" },
+                { header: "Name", render: (c) => c.name, sortValue: (c) => c.name },
+                { header: "Status", render: (c) => c.status, sortValue: (c) => c.status },
+                { header: "Entity", render: (c) => entityName(c.entity_id), sortValue: (c) => entityName(c.entity_id) },
+                { header: "Mitigates", render: (c) => riskName(c.risk_id), sortValue: (c) => riskName(c.risk_id) },
+                { header: "Connector", render: (c) => c.test_connector_type ?? "—", sortValue: (c) => c.test_connector_type },
+                { header: "Created", render: (c) => formatDateTime(c.created_at), sortValue: (c) => c.created_at },
+                { header: "Updated", render: (c) => formatDateTime(c.updated_at), sortValue: (c) => c.updated_at },
               ]}
             />
           </Card>
@@ -402,12 +415,14 @@ export default function WorkspacePage() {
                 apiDelete(`/api/v1/issues/${id}`).then(() => setIssues((prev) => prev.filter((i) => i.id !== id)));
               }}
               columns={[
-                { header: "Title", render: (i) => i.title },
-                { header: "Priority", render: (i) => i.priority },
-                { header: "State", render: (i) => i.state },
-                { header: "Source", render: (i) => i.source },
-                { header: "Related Risk", render: (i) => riskName(i.risk_id) },
-                { header: "Related Control", render: (i) => controlName(i.control_id) },
+                { header: "Title", render: (i) => i.title, sortValue: (i) => i.title },
+                { header: "Priority", render: (i) => i.priority, sortValue: (i) => i.priority },
+                { header: "State", render: (i) => i.state, sortValue: (i) => i.state },
+                { header: "Source", render: (i) => i.source, sortValue: (i) => i.source },
+                { header: "Related Risk", render: (i) => riskName(i.risk_id), sortValue: (i) => riskName(i.risk_id) },
+                { header: "Related Control", render: (i) => controlName(i.control_id), sortValue: (i) => controlName(i.control_id) },
+                { header: "Created", render: (i) => formatDateTime(i.created_at), sortValue: (i) => i.created_at },
+                { header: "Updated", render: (i) => formatDateTime(i.updated_at), sortValue: (i) => i.updated_at },
               ]}
             />
           </Card>
@@ -428,9 +443,11 @@ export default function WorkspacePage() {
                 apiDelete(`/api/v1/departments/${id}`).then(() => setDepartments((prev) => prev.filter((d) => d.id !== id)));
               }}
               columns={[
-                { header: "Name", render: (d) => d.name },
-                { header: "Manager", render: (d) => d.manager_id ?? "—" },
-                { header: "Cost Center", render: (d) => d.cost_center ?? "—" },
+                { header: "Name", render: (d) => d.name, sortValue: (d) => d.name },
+                { header: "Manager", render: (d) => d.manager_id ?? "—", sortValue: (d) => d.manager_id },
+                { header: "Cost Center", render: (d) => d.cost_center ?? "—", sortValue: (d) => d.cost_center },
+                { header: "Created", render: (d) => formatDateTime(d.created_at), sortValue: (d) => d.created_at },
+                { header: "Updated", render: (d) => formatDateTime(d.updated_at), sortValue: (d) => d.updated_at },
               ]}
             />
           </Card>
@@ -473,10 +490,14 @@ export default function WorkspacePage() {
                 apiDelete(`/api/v1/entities/${id}`).then(() => setEntities((prev) => prev.filter((e) => e.id !== id)));
               }}
               columns={[
-                { header: "Name", render: (e) => e.name },
-                { header: "Type", render: (e) => e.type },
-                { header: "Department", render: (e) => departments.find((d) => d.id === e.department_id)?.name ?? "—" },
-                { header: "Status", render: (e) => e.status },
+                { header: "Name", render: (e) => e.name, sortValue: (e) => e.name },
+                { header: "Type", render: (e) => e.type, sortValue: (e) => e.type },
+                {
+                  header: "Department",
+                  render: (e) => departments.find((d) => d.id === e.department_id)?.name ?? "—",
+                  sortValue: (e) => departments.find((d) => d.id === e.department_id)?.name ?? null,
+                },
+                { header: "Status", render: (e) => e.status, sortValue: (e) => e.status },
                 {
                   header: "Vendor Review",
                   render: (e) =>
@@ -489,7 +510,10 @@ export default function WorkspacePage() {
                     ) : (
                       "—"
                     ),
+                  sortValue: (e) => (e.type === "Vendor" ? (isOverdueVendor(e) ? 1 : 0) : null),
                 },
+                { header: "Created", render: (e) => formatDateTime(e.created_at), sortValue: (e) => e.created_at },
+                { header: "Updated", render: (e) => formatDateTime(e.updated_at), sortValue: (e) => e.updated_at },
               ]}
             />
           </Card>
@@ -524,10 +548,12 @@ export default function WorkspacePage() {
               rows={assessments}
               onRowClick={(a) => setViewingAssessment(a)}
               columns={[
-                { header: "Risk", render: (a) => riskName(a.risk_id) },
-                { header: "Assessor", render: (a) => a.assessor_id ?? "—" },
-                { header: "State", render: (a) => a.state },
-                { header: "Score", render: (a) => a.score ?? "—" },
+                { header: "Risk", render: (a) => riskName(a.risk_id), sortValue: (a) => riskName(a.risk_id) },
+                { header: "Assessor", render: (a) => a.assessor_id ?? "—", sortValue: (a) => a.assessor_id },
+                { header: "State", render: (a) => a.state, sortValue: (a) => a.state },
+                { header: "Score", render: (a) => a.score ?? "—", sortValue: (a) => a.score },
+                { header: "Created", render: (a) => formatDateTime(a.created_at), sortValue: (a) => a.created_at },
+                { header: "Updated", render: (a) => formatDateTime(a.updated_at), sortValue: (a) => a.updated_at },
               ]}
             />
           </Card>

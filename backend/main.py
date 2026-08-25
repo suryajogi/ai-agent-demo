@@ -340,6 +340,8 @@ def build_crud_router(
                     )
                 )
             setattr(item, field, value)
+        if hasattr(item, "updated_at"):
+            item.updated_at = datetime.now()
         db.commit()
         db.refresh(item)
         if post_fetch:
