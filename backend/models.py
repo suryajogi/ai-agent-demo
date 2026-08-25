@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, String
+from sqlalchemy import Boolean, Date, DateTime, Float, ForeignKey, Integer, JSON, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -29,8 +29,11 @@ class User(Base):
     email: Mapped[Optional[str]] = mapped_column(String)
     role_id: Mapped[Optional[int]] = mapped_column(ForeignKey("roles.id"))
     active: Mapped[bool] = mapped_column(Boolean, default=True)
+    password_hash: Mapped[Optional[str]] = mapped_column(String)
+    department_id: Mapped[Optional[int]] = mapped_column(ForeignKey("departments.id"))
 
     role: Mapped[Optional["Role"]] = relationship(back_populates="users")
+    department: Mapped[Optional["Department"]] = relationship()
 
 
 # --- 1. Core Organizational Structure -------------------------------------
@@ -56,6 +59,13 @@ class Entity(Base):
     department_id: Mapped[Optional[int]] = mapped_column(ForeignKey("departments.id"))
     owner_id: Mapped[Optional[str]] = mapped_column(String)
     status: Mapped[str] = mapped_column(String, default="Active")  # Active, Inactive
+
+    # Vendor lifecycle (NR-001) — only meaningful when type == "Vendor", but kept
+    # on Entity rather than a separate table since every entity may eventually
+    # need a contract/review cadence, not just vendors.
+    contract_end_date: Mapped[Optional[date]] = mapped_column(Date)
+    criticality_tier: Mapped[Optional[str]] = mapped_column(String)  # Low, Medium, High, Critical
+    last_due_diligence_date: Mapped[Optional[date]] = mapped_column(Date)
 
     department: Mapped[Optional["Department"]] = relationship(back_populates="entities")
     risks: Mapped[list["Risk"]] = relationship(back_populates="entity")
@@ -84,6 +94,12 @@ class RiskMethodology(Base):
     assessment_type: Mapped[str] = mapped_column(String)  # Qualitative, Quantitative, Hybrid
     scoring_logic: Mapped[Optional[str]] = mapped_column(String)
 
+    # Configurable scoring matrix (NR-011): list of
+    # {"min_score", "max_score", "label", "color"}. None means "use the
+    # application's default 4-band thresholds" (no regression for existing
+    # methodologies that never configure this).
+    scoring_bands: Mapped[Optional[list]] = mapped_column(JSON)
+
 
 class RiskFramework(Base):
     __tablename__ = "risk_frameworks"
@@ -95,6 +111,7 @@ class RiskFramework(Base):
 
     scope: Mapped[Optional["RiskScope"]] = relationship(back_populates="frameworks")
     statements: Mapped[list["RiskStatement"]] = relationship(back_populates="framework")
+    control_mappings: Mapped[list["ControlFrameworkMap"]] = relationship(back_populates="framework")
 
 
 class RiskStatement(Base):
@@ -193,9 +210,16 @@ class Control(Base):
     entity_id: Mapped[Optional[int]] = mapped_column(ForeignKey("entities.id"))
     risk_id: Mapped[Optional[int]] = mapped_column(ForeignKey("risks.id"))
 
+    # Continuous control monitoring (NR-016). test_connector_type "none" (or
+    # null) preserves the original random Pass/Fail demo behavior.
+    test_connector_type: Mapped[Optional[str]] = mapped_column(String)  # none, http_health_check
+    test_connector_config: Mapped[Optional[dict]] = mapped_column(JSON)
+
     entity: Mapped[Optional["Entity"]] = relationship(back_populates="controls")
     risk: Mapped[Optional["Risk"]] = relationship(back_populates="controls")
     issues: Mapped[list["Issue"]] = relationship(back_populates="control")
+    framework_mappings: Mapped[list["ControlFrameworkMap"]] = relationship(back_populates="control")
+    test_results: Mapped[list["ControlTestResult"]] = relationship(back_populates="control")
 
 
 class Issue(Base):
@@ -210,6 +234,12 @@ class Issue(Base):
     assigned_to: Mapped[Optional[str]] = mapped_column(String)
     risk_id: Mapped[Optional[int]] = mapped_column(ForeignKey("risks.id"))
     control_id: Mapped[Optional[int]] = mapped_column(ForeignKey("controls.id"))
+
+    # CAPA — root cause & corrective action (NR-004).
+    root_cause: Mapped[Optional[str]] = mapped_column(String)
+    corrective_action: Mapped[Optional[str]] = mapped_column(String)
+    effectiveness_check_date: Mapped[Optional[date]] = mapped_column(Date)
+    recurrence_count: Mapped[int] = mapped_column(Integer, default=0)
 
     risk: Mapped[Optional["Risk"]] = relationship(back_populates="issues")
     control: Mapped[Optional["Control"]] = relationship(back_populates="issues")
@@ -230,6 +260,93 @@ class RiskMitigation(Base):
     control: Mapped[Optional["Control"]] = relationship()
 
 
+class ControlFrameworkMap(Base):
+    """One control can satisfy many frameworks and vice versa (NR-002)."""
+
+    __tablename__ = "control_framework_map"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    control_id: Mapped[int] = mapped_column(ForeignKey("controls.id"), nullable=False)
+    framework_id: Mapped[int] = mapped_column(ForeignKey("risk_frameworks.id"), nullable=False)
+    requirement_reference: Mapped[Optional[str]] = mapped_column(String)  # e.g. "SOX 404", "ISO 27001 A.9.2"
+
+    control: Mapped["Control"] = relationship(back_populates="framework_mappings")
+    framework: Mapped["RiskFramework"] = relationship(back_populates="control_mappings")
+
+
+class RiskAppetiteThreshold(Base):
+    """Max acceptable inherent/residual score before a risk is flagged (NR-005)."""
+
+    __tablename__ = "risk_appetite_thresholds"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    category: Mapped[Optional[str]] = mapped_column(String)  # matches risk_statements.category, or null = global
+    department_id: Mapped[Optional[int]] = mapped_column(ForeignKey("departments.id"))
+    max_acceptable_score: Mapped[int] = mapped_column(Integer, nullable=False)
+
+    department: Mapped[Optional["Department"]] = relationship()
+
+
+class EvidenceAttachment(Base):
+    """Files attached to a risk/control/issue/assessment (NR-003)."""
+
+    __tablename__ = "evidence_attachments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    record_type: Mapped[str] = mapped_column(String, nullable=False)  # risk, control, issue, assessment
+    record_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    file_name: Mapped[str] = mapped_column(String, nullable=False)
+    file_path: Mapped[str] = mapped_column(String, nullable=False)  # relative path under backend/uploads/
+    content_type: Mapped[Optional[str]] = mapped_column(String)
+    uploaded_by: Mapped[Optional[str]] = mapped_column(String)
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+
+
+class ControlTestResult(Base):
+    """Persisted history for control tests, real or simulated (NR-016)."""
+
+    __tablename__ = "control_test_results"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    control_id: Mapped[int] = mapped_column(ForeignKey("controls.id"), nullable=False)
+    tested_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    result: Mapped[str] = mapped_column(String, nullable=False)  # Pass, Fail
+    detail: Mapped[Optional[str]] = mapped_column(String)
+    connector_type: Mapped[Optional[str]] = mapped_column(String)
+
+    control: Mapped["Control"] = relationship(back_populates="test_results")
+
+
+class Notification(Base):
+    """In-app notifications (NR-007) — no outbound email/webhook delivery."""
+
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recipient: Mapped[str] = mapped_column(String, nullable=False)  # free-text identity, matches assigned_to/owner
+    subject: Mapped[str] = mapped_column(String, nullable=False)
+    body: Mapped[Optional[str]] = mapped_column(String)
+    related_type: Mapped[Optional[str]] = mapped_column(String)  # risk_task, risk_mitigation
+    related_id: Mapped[Optional[int]] = mapped_column(Integer)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    read_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+
+
+class RiskScoreSnapshot(Base):
+    """Point-in-time snapshot of the risk-summary report, for trending (NR-008)."""
+
+    __tablename__ = "risk_score_history"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    snapshot_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    total_risks: Mapped[int] = mapped_column(Integer, default=0)
+    avg_inherent_score: Mapped[Optional[float]] = mapped_column(Float)
+    avg_residual_score: Mapped[Optional[float]] = mapped_column(Float)
+    open_issue_count: Mapped[int] = mapped_column(Integer, default=0)
+    control_compliance_pct: Mapped[Optional[float]] = mapped_column(Float)
+
+
 # --- 5. Assessment Engine Structures -----------------------------------------
 
 
@@ -241,6 +358,10 @@ class AssessmentTemplate(Base):
     description: Mapped[Optional[str]] = mapped_column(String)
     metric_type: Mapped[str] = mapped_column(String, default="Qualitative")
     scoring_method: Mapped[str] = mapped_column(String, default="Weighted Average")
+
+    # Recurring assessments (NR-010).
+    recurrence_rule: Mapped[Optional[str]] = mapped_column(String)  # none, quarterly, annual
+    last_generated_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
     questions: Mapped[list["AssessmentQuestion"]] = relationship(
         back_populates="template", cascade="all, delete-orphan"
@@ -284,7 +405,7 @@ class AssessmentResponse(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     assessment_id: Mapped[Optional[int]] = mapped_column(ForeignKey("risk_assessments.id"))
     question_id: Mapped[Optional[int]] = mapped_column(ForeignKey("assessment_questions.id"))
-    selected_value: Mapped[int] = mapped_column(Integer)  # 1-5 scale
+    selected_value: Mapped[Optional[int]] = mapped_column(Integer)  # 1-5 scale; null until answered
     justification: Mapped[Optional[str]] = mapped_column(String)
 
     assessment: Mapped[Optional["RiskAssessment"]] = relationship(back_populates="responses")

@@ -26,10 +26,25 @@ class UserCreate(BaseModel):
     email: Optional[str] = None
     role_id: Optional[int] = None
     active: bool = True
+    department_id: Optional[int] = None
 
 
 class UserRead(UserCreate, ORMBase):
     id: int
+
+
+# --- Auth (NR-012) -------------------------------------------------------------
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserRead
 
 
 # --- Departments / Entities --------------------------------------------------
@@ -51,6 +66,9 @@ class EntityCreate(BaseModel):
     department_id: Optional[int] = None
     owner_id: Optional[str] = None
     status: str = "Active"
+    contract_end_date: Optional[date] = None
+    criticality_tier: Optional[str] = None
+    last_due_diligence_date: Optional[date] = None
 
 
 class EntityRead(EntityCreate, ORMBase):
@@ -70,10 +88,18 @@ class RiskScopeRead(RiskScopeCreate, ORMBase):
     id: int
 
 
+class ScoringBand(BaseModel):
+    min_score: int
+    max_score: int
+    label: str
+    color: str
+
+
 class RiskMethodologyCreate(BaseModel):
     name: str
     assessment_type: str
     scoring_logic: Optional[str] = None
+    scoring_bands: Optional[list[ScoringBand]] = None
 
 
 class RiskMethodologyRead(RiskMethodologyCreate, ORMBase):
@@ -116,6 +142,7 @@ class RiskCreate(BaseModel):
 
 class RiskRead(RiskCreate, ORMBase):
     id: int
+    breaches_appetite: bool = False
 
 
 # --- Execution & operations ---------------------------------------------------
@@ -168,6 +195,8 @@ class ControlCreate(BaseModel):
     status: str = "Draft"
     entity_id: Optional[int] = None
     risk_id: Optional[int] = None
+    test_connector_type: Optional[str] = None
+    test_connector_config: Optional[dict] = None
 
 
 class ControlRead(ControlCreate, ORMBase):
@@ -183,6 +212,10 @@ class IssueCreate(BaseModel):
     assigned_to: Optional[str] = None
     risk_id: Optional[int] = None
     control_id: Optional[int] = None
+    root_cause: Optional[str] = None
+    corrective_action: Optional[str] = None
+    effectiveness_check_date: Optional[date] = None
+    recurrence_count: int = 0
 
 
 class IssueRead(IssueCreate, ORMBase):
@@ -202,6 +235,72 @@ class RiskMitigationRead(RiskMitigationCreate, ORMBase):
     id: int
 
 
+class ControlFrameworkMapCreate(BaseModel):
+    control_id: int
+    framework_id: int
+    requirement_reference: Optional[str] = None
+
+
+class ControlFrameworkMapRead(ControlFrameworkMapCreate, ORMBase):
+    id: int
+
+
+class RiskAppetiteThresholdCreate(BaseModel):
+    name: str
+    category: Optional[str] = None
+    department_id: Optional[int] = None
+    max_acceptable_score: int
+
+
+class RiskAppetiteThresholdRead(RiskAppetiteThresholdCreate, ORMBase):
+    id: int
+
+
+class EvidenceAttachmentRead(ORMBase):
+    id: int
+    record_type: str
+    record_id: int
+    file_name: str
+    content_type: Optional[str] = None
+    uploaded_by: Optional[str] = None
+    uploaded_at: datetime
+
+
+class ControlTestResultRead(ORMBase):
+    id: int
+    control_id: int
+    tested_at: datetime
+    result: str
+    detail: Optional[str] = None
+    connector_type: Optional[str] = None
+
+
+class NotificationRead(ORMBase):
+    id: int
+    recipient: str
+    subject: str
+    body: Optional[str] = None
+    related_type: Optional[str] = None
+    related_id: Optional[int] = None
+    created_at: datetime
+    read_at: Optional[datetime] = None
+
+
+class NotificationCheckResult(BaseModel):
+    created_count: int
+    skipped_count: int
+
+
+class RiskScoreSnapshotRead(ORMBase):
+    id: int
+    snapshot_at: datetime
+    total_risks: int
+    avg_inherent_score: Optional[float] = None
+    avg_residual_score: Optional[float] = None
+    open_issue_count: int
+    control_compliance_pct: Optional[float] = None
+
+
 # --- Assessment engine structures ----------------------------------------------
 
 
@@ -210,10 +309,12 @@ class AssessmentTemplateCreate(BaseModel):
     description: Optional[str] = None
     metric_type: str = "Qualitative"
     scoring_method: str = "Weighted Average"
+    recurrence_rule: Optional[str] = None
 
 
 class AssessmentTemplateRead(AssessmentTemplateCreate, ORMBase):
     id: int
+    last_generated_at: Optional[datetime] = None
 
 
 class AssessmentQuestionCreate(BaseModel):
@@ -247,7 +348,7 @@ class AssessmentTemplateWithQuestions(AssessmentTemplateRead):
 class AssessmentResponseCreate(BaseModel):
     assessment_id: Optional[int] = None
     question_id: Optional[int] = None
-    selected_value: int
+    selected_value: Optional[int] = None
     justification: Optional[str] = None
 
 

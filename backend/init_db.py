@@ -1,5 +1,6 @@
 import random
 from datetime import datetime, timedelta
+from auth import hash_password
 from models import (
     AssessmentOption,
     AssessmentQuestion,
@@ -10,6 +11,7 @@ from models import (
     Entity,
     Issue,
     Risk,
+    RiskAppetiteThreshold,
     RiskAssessment,
     RiskFramework,
     RiskMethodology,
@@ -20,6 +22,8 @@ from models import (
     User,
 )
 from database import engine
+
+DEMO_PASSWORD = "changeme123"
 Base.metadata.drop_all(engine)
 Base.metadata.create_all(engine)
 
@@ -35,18 +39,24 @@ roles = [Role(name=name, description=f"{name} role within the GRC workspace.") f
 session.add_all(roles)
 session.commit()
 
+password_hash = hash_password(DEMO_PASSWORD)
 users = [
     User(
         username=f"user.{i:03d}",
         display_name=f"GRC User {i}",
         email=f"user.{i:03d}@example.com",
-        role_id=random.choice(roles).id,
+        # Cycle deterministically (rather than random.choice) so every role,
+        # including Administrator, is guaranteed at least a few seeded users
+        # to log in as.
+        role_id=roles[(i - 1) % len(roles)].id,
         active=random.random() > 0.1,
+        password_hash=password_hash,
     )
     for i in range(1, 21)
 ]
 session.add_all(users)
 session.commit()
+print(f"🔑 Seeded users with demo password '{DEMO_PASSWORD}' (e.g. username 'user.001')")
 
 # 1. Departments (10 distinct departments)
 dept_names = ["Information Technology", "Cybersecurity", "Finance & Accounting", "Human Resources", "Legal & Compliance", "Operations", "Product Engineering", "Global Supply Chain", "Sales & Marketing", "Customer Success"]
@@ -55,16 +65,24 @@ session.add_all(depts)
 session.commit()
 
 # 2. Entities (Scale up to 50 assets/entities mapping to departments)
-entity_types = ["Application", "Facility", "Vendor Platform", "Database Critical Stack", "Cloud Infra Cluster"]
+entity_types = ["Application", "Facility", "Vendor", "Database Critical Stack", "Cloud Infra Cluster"]
+criticality_tiers = ["Low", "Medium", "High", "Critical"]
 entities = []
 for i in range(1, 51):
+    entity_type = random.choice(entity_types)
     ent = Entity(
         name=f"SN-Asset-{1000+i} ({random.choice(['SAP ERP', 'AWS Core', 'Salesforce CRM', 'HR Workday', 'Active Directory', 'Billing API'])})",
-        type=random.choice(entity_types),
+        type=entity_type,
         department_id=random.choice(depts).id,
         owner_id=f"OWNER-{500+i}",
         status="Active" if random.random() > 0.1 else "Inactive"
     )
+    if entity_type == "Vendor":
+        # Vendor lifecycle fields (NR-001) — a mix of overdue and current so
+        # GET /api/v1/entities/vendors/overdue has something to find.
+        ent.criticality_tier = random.choice(criticality_tiers)
+        ent.contract_end_date = datetime.now().date() + timedelta(days=random.randint(-60, 300))
+        ent.last_due_diligence_date = datetime.now().date() - timedelta(days=random.randint(30, 500))
     entities.append(ent)
 session.add_all(entities)
 session.commit()
@@ -77,6 +95,17 @@ methodologies = [
     RiskMethodology(name="Hybrid Regulatory Weighting", assessment_type="Hybrid", scoring_logic="Weighted Compliance Score")
 ]
 session.add_all(scopes + methodologies)
+session.commit()
+
+# 3b. Risk Appetite Thresholds (NR-005) — one global default, plus a
+# stricter category-scoped one so the demo data actually has some risks
+# that breach appetite (for NR-006's segregation-of-duties gate to have
+# something to gate).
+appetite_thresholds = [
+    RiskAppetiteThreshold(name="Global Default Appetite", category=None, department_id=None, max_acceptable_score=15),
+    RiskAppetiteThreshold(name="Compliance Risk Appetite", category="Compliance", department_id=None, max_acceptable_score=9),
+]
+session.add_all(appetite_thresholds)
 session.commit()
 
 # 4. Risk Frameworks & Statements (Populate 10 Frameworks, 20 Statements)
@@ -130,6 +159,10 @@ for i in range(1, 51):
     )
     controls.append(c)
     session.add(c)
+# NR-016 — give the first control a real connector so /simulation/trigger-test
+# has at least one non-random example to demonstrate.
+controls[0].test_connector_type = "http_health_check"
+controls[0].test_connector_config = {"url": "https://httpstat.us/200", "expect_status": 200}
 session.commit()
 
 # 6b. Risk Mitigations (remediation actions tied to risks/controls)
@@ -166,6 +199,7 @@ template = AssessmentTemplate(
     description="Baseline methodology used to assess likelihood and impact controls for a risk.",
     metric_type="Qualitative",
     scoring_method="Weighted Average",
+    recurrence_rule="quarterly",  # NR-010 — demonstrates /assessments/generate-recurring
 )
 session.add(template)
 session.commit()
