@@ -146,6 +146,17 @@ export default function WorkspacePage() {
   const filteredIssues = issues.filter((i) => (issueSearch ? i.title.toLowerCase().includes(issueSearch.toLowerCase()) : true));
   const filteredEntities = entities.filter((e) => (overdueVendorsOnly ? isOverdueVendor(e) : true));
 
+  async function handleRestartAssessments(scope: "risks" | "entities", id: number) {
+    if (!requireAuthOrRedirect()) return;
+    try {
+      const result = await apiPost<{ restarted_count: number }>(`/api/v1/${scope}/${id}/restart-assessments`, {});
+      setImportMessage(`Restarted ${result.restarted_count} assessment(s) back to Not Started.`);
+      reload();
+    } catch (err) {
+      setImportMessage((err as Error).message);
+    }
+  }
+
   async function handleImport(resource: "risks" | "controls" | "entities", file: File) {
     const formData = new FormData();
     formData.append("file", file);
@@ -582,6 +593,14 @@ export default function WorkspacePage() {
               <div className="sm:col-span-2">
                 <ReadField label="Description" value={r.description} />
               </div>
+              <div className="sm:col-span-2">
+                <button
+                  onClick={() => handleRestartAssessments("risks", r.id)}
+                  className="text-sm text-zinc-500 hover:underline"
+                >
+                  Restart assessments for this risk
+                </button>
+              </div>
               <EvidenceList recordType="risk" recordId={r.id} />
             </>
           )}
@@ -703,6 +722,14 @@ export default function WorkspacePage() {
               <ReadField label="Criticality Tier" value={e.criticality_tier} />
               <ReadField label="Contract End Date" value={e.contract_end_date} />
               <ReadField label="Last Due Diligence" value={e.last_due_diligence_date} />
+              <div className="sm:col-span-2">
+                <button
+                  onClick={() => handleRestartAssessments("entities", e.id)}
+                  className="text-sm text-zinc-500 hover:underline"
+                >
+                  Restart assessments for all risks under this entity
+                </button>
+              </div>
             </>
           )}
           renderEdit={(e, onSaved, onCancel) => (

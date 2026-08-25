@@ -573,6 +573,84 @@ def generate_recurring_assessments(db: Session = Depends(get_db)) -> dict[str, i
 
 
 # ---------------------------------------------------------------------------
+# Restart Assessments — reset assessment(s) back to Not Started so they can
+# be retaken, without losing the questionnaire shape (existing answers are
+# blanked in place rather than deleted; any question missing a response row
+# — e.g. an assessment created before assessment_post_create existed — gets
+# one added). Scoped to a single risk, or every risk under an entity.
+# ---------------------------------------------------------------------------
+
+
+def _restart_assessment(assessment: "models.RiskAssessment", db: Session, changed_by: str) -> None:
+    old_state = assessment.state
+    assessment.state = "Not Started"
+    assessment.score = None
+    assessment.comments = None
+    for response in assessment.responses:
+        response.selected_value = None
+        response.justification = None
+    if assessment.template_id:
+        existing_question_ids = {r.question_id for r in assessment.responses}
+        questions = (
+            db.query(models.AssessmentQuestion)
+            .filter(models.AssessmentQuestion.template_id == assessment.template_id)
+            .all()
+        )
+        for question in questions:
+            if question.id not in existing_question_ids:
+                db.add(
+                    models.AssessmentResponse(
+                        assessment_id=assessment.id, question_id=question.id,
+                        selected_value=None, justification=None,
+                    )
+                )
+    if old_state != "Not Started":
+        db.add(
+            models.AuditLog(
+                table_name="risk_assessments", record_id=assessment.id, action="updated",
+                field_name="state", old_value=old_state, new_value="Not Started", changed_by=changed_by,
+            )
+        )
+
+
+@app.post(
+    "/api/v1/risks/{risk_id}/restart-assessments",
+    tags=["risk-assessments"],
+    dependencies=[Depends(auth.require_roles(*ADMIN_ROLES))],
+)
+def restart_risk_assessments(risk_id: int, request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if db.get(models.Risk, risk_id) is None:
+        raise HTTPException(status_code=404, detail=f"Risk {risk_id} not found")
+    changed_by = request.headers.get("X-User", "system")
+    assessments = db.query(models.RiskAssessment).filter(models.RiskAssessment.risk_id == risk_id).all()
+    for assessment in assessments:
+        _restart_assessment(assessment, db, changed_by)
+    db.commit()
+    return {"restarted_count": len(assessments), "assessment_ids": [a.id for a in assessments]}
+
+
+@app.post(
+    "/api/v1/entities/{entity_id}/restart-assessments",
+    tags=["risk-assessments"],
+    dependencies=[Depends(auth.require_roles(*ADMIN_ROLES))],
+)
+def restart_entity_assessments(entity_id: int, request: Request, db: Session = Depends(get_db)) -> dict[str, Any]:
+    if db.get(models.Entity, entity_id) is None:
+        raise HTTPException(status_code=404, detail=f"Entity {entity_id} not found")
+    changed_by = request.headers.get("X-User", "system")
+    risk_ids = [r.id for r in db.query(models.Risk).filter(models.Risk.entity_id == entity_id).all()]
+    assessments = (
+        db.query(models.RiskAssessment).filter(models.RiskAssessment.risk_id.in_(risk_ids)).all()
+        if risk_ids
+        else []
+    )
+    for assessment in assessments:
+        _restart_assessment(assessment, db, changed_by)
+    db.commit()
+    return {"restarted_count": len(assessments), "assessment_ids": [a.id for a in assessments]}
+
+
+# ---------------------------------------------------------------------------
 # Configurable Scoring Matrix (NR-011)
 # ---------------------------------------------------------------------------
 
