@@ -9,90 +9,88 @@ This project replicates the data relationships and form structures of the **Serv
 ### Core Repository Directory Topology
 ```text
 📁 ai-agent-demo/
-    ├── 📄 PRODUCT_BACKLOG.md
-    ├── 📄 end_user_agent.py
-    ├── 📄 ARCHITECTURE.md
     ├── 📄 agentic_workflow.py
-    ├── 📄 requirements.docx
-    ├── 📄 README.md
-    ├── 📄 documentation_agent.py
-    ├── 📄 summary_email_agent.py
-    ├── 📄 AGENTS.md
-    ├── 📄 PRODUCT_BACKLOG_CANDIDATES.csv
-    ├── 📄 assessor_agent.py
-    ├── 📄 CLAUDE.md
     ├── 📄 product_owner_agent.py
-    ├── 📁 frontend/
-        ├── 📄 postcss.config.mjs
-        ├── 📄 tsconfig.tsbuildinfo
-        ├── 📄 next-env.d.ts
+    ├── 📄 documentation_agent.py
+    ├── 📄 end_user_agent.py
+    ├── 📄 PRODUCT_BACKLOG.md
+    ├── 📄 CLAUDE.md
+    ├── 📄 AGENTS.md
+    ├── 📄 ARCHITECTURE.md
+    ├── 📄 README.md
+    ├── 📄 assessor_agent.py
+    ├── 📄 summary_email_agent.py
+    ├── 📄 PRODUCT_BACKLOG_CANDIDATES.csv
+    ├── 📄 requirements.docx
+    ├── 📁 backend/
+        ├── 📄 scoring.py
+        ├── 📄 main.py
+        ├── 📄 schemas.py
+        ├── 📄 init_db.py
+        ├── 📄 control_testing.py
+        ├── 📄 models.py
+        ├── 📄 database.py
+        ├── 📄 requirements.txt
+        ├── 📄 auth.py
+        ├── 📄 reporting_agent.py
+    ├── 📁 tests/
         ├── 📄 README.md
-        ├── 📄 package-lock.json
-        ├── 📄 package.json
-        ├── 📄 tsconfig.json
-        ├── 📄 AGENTS.md
+    ├── 📁 .github/
+        ├── 📁 workflows/
+            ├── 📄 doc-update.yml
+    ├── 📁 frontend/
         ├── 📄 eslint.config.mjs
         ├── 📄 CLAUDE.md
+        ├── 📄 AGENTS.md
+        ├── 📄 package.json
+        ├── 📄 package-lock.json
+        ├── 📄 README.md
+        ├── 📄 tsconfig.json
+        ├── 📄 postcss.config.mjs
         ├── 📄 next.config.ts
         ├── 📁 app/
-            ├── 📄 favicon.ico
             ├── 📄 MetricBanner.tsx
+            ├── 📄 globals.css
             ├── 📄 layout.tsx
             ├── 📄 page.tsx
-            ├── 📄 globals.css
+            ├── 📄 favicon.ico
             ├── 📁 workspace/
                 ├── 📄 ControlForm.tsx
-                ├── 📄 ControlTestHistory.tsx
                 ├── 📄 EvidenceList.tsx
-                ├── 📄 NotificationBell.tsx
-                ├── 📄 DepartmentForm.tsx
-                ├── 📄 AssessmentLauncherForm.tsx
                 ├── 📄 RiskHeatmap.tsx
-                ├── 📄 IssueForm.tsx
                 ├── 📄 page.tsx
-                ├── 📄 RiskForm.tsx
+                ├── 📄 AssessmentLauncherForm.tsx
+                ├── 📄 DepartmentForm.tsx
+                ├── 📄 NotificationBell.tsx
                 ├── 📄 EntityForm.tsx
                 ├── 📄 ui.tsx
+                ├── 📄 RiskForm.tsx
+                ├── 📄 ControlTestHistory.tsx
+                ├── 📄 IssueForm.tsx
             ├── 📁 assessor/
                 ├── 📄 page.tsx
             ├── 📁 login/
                 ├── 📄 page.tsx
         ├── 📁 public/
-            ├── 📄 file.svg
-            ├── 📄 vercel.svg
             ├── 📄 next.svg
-            ├── 📄 globe.svg
+            ├── 📄 file.svg
             ├── 📄 window.svg
+            ├── 📄 globe.svg
+            ├── 📄 vercel.svg
         ├── 📁 lib/
             ├── 📄 api.ts
-    ├── 📁 tests/
-        ├── 📄 README.md
-    ├── 📁 backend/
-        ├── 📄 auth.py
-        ├── 📄 models.py
-        ├── 📄 requirements.txt
-        ├── 📄 scoring.py
-        ├── 📄 database.py
-        ├── 📄 schemas.py
-        ├── 📄 reporting_agent.py
-        ├── 📄 main.py
-        ├── 📄 control_testing.py
-        ├── 📄 init_db.py
     ├── 📁 ai/
         ├── 📄 README.md
-        ├── 📁 tools/
-            ├── 📄 __init__.py
         ├── 📁 agents/
             ├── 📄 __init__.py
             ├── 📄 evidence_agent.py
+            ├── 📄 risk_agent.py
             ├── 📄 manager_agent.py
             ├── 📄 assessment_agent.py
-            ├── 📄 risk_agent.py
+        ├── 📁 tools/
+            ├── 📄 __init__.py
         ├── 📁 rag/
             ├── 📄 __init__.py
-    ├── 📁 .github/
-        ├── 📁 workflows/
-            ├── 📄 doc-update.yml
 ```
 
 ---
