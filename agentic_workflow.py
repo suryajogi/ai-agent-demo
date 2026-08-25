@@ -44,14 +44,23 @@ class AutonomousGRCFactory:
         with open(main_py_path, "r") as f:
             current_code = f.read()
 
-        prompt = f"Modify this Python FastAPI code to support these backlog requirements: {backlog_content}\n\nCurrent code:\n{current_code}\n\nReturn ONLY the complete raw Python code. No markdown formatting, no explanations."
+        prompt = f"Modify this Python FastAPI code to support these backlog requirements: {backlog_content}\n\nCurrent code:\n{current_code}\n\nReturn ONLY valid executable Python code. Absolutely NO conversational greetings, introduction lines, or trailing markdown comments."
         
         response = ollama.chat(model='llama3', messages=[{'role': 'user', 'content': prompt}])
-        clean_code = response['message']['content'].replace("```python", "").replace("```", "").strip()
+        raw_output = response['message']['content']
+
+        # === ANTI-AI CONVERSATION CLEANER (SAFETY BUFFER) ===
+        clean_lines = []
+        for line in raw_output.splitlines():
+            # Skip common AI chatter lines and markdown wrappers
+            if any(marker in line.lower() for marker in ["here is the", "completed code", "```python", "```", "python code:"]):
+                continue
+            clean_lines.append(line)
+        clean_code = "\n".join(clean_lines).strip()
 
         with open(main_py_path, "w") as f:
             f.write(clean_code)
-        print("🟢 Developer Agent: Finished structural modifications.")
+        print("🟢 Developer Agent: Finished structural modifications with clean syntax filters.")
 
         # 4. QA check
         is_safe_to_merge = self.run_qa_tests()
@@ -60,7 +69,7 @@ class AutonomousGRCFactory:
         if is_safe_to_merge:
             print("🚀 Deployment Agent: Code verified. Committing changes...")
             self.run_command("git add .", cwd=self.root_dir)
-            self.run_command(f'git commit -m "feat(local-ai): automated build via free llama3 model"', cwd=self.root_dir)
+            self.run_command(f'git commit -m "feat(local-ai): automated build via clean local AI flow"', cwd=self.root_dir)
             
             print("🔀 Merge Agent: Merging changes back to main...")
             self.run_command("git checkout main", cwd=self.root_dir)
