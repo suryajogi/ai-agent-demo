@@ -105,6 +105,8 @@ A consistent convention — a small class taking `root_dir`, one clearly-named m
         print(f"🎯 Documentation Agent complete! Created file: {self.doc_file_path}")
 
 if __name__ == "__main__":
-    # Target your local repository root
-    agent = DocumentationAgent(os.path.expanduser("~/Desktop/ai-agent-demo"))
+    # Derived from this file's own location so it works from any checkout
+    # path — a hardcoded ~/Desktop/ai-agent-demo home path breaks in CI,
+    # where ~ is /home/runner and the checkout lives elsewhere.
+    agent = DocumentationAgent(os.path.dirname(os.path.abspath(__file__)))
     agent.write_architecture_manual()

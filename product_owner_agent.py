@@ -152,5 +152,7 @@ effort (S/M/L)."""
 
 
 if __name__ == "__main__":
-    agent = ProductOwnerAgent(os.path.expanduser("~/Desktop/ai-agent-demo"))
+    # Derived from this file's own location, not a hardcoded home path, so
+    # it works from any checkout (see documentation_agent.py for why).
+    agent = ProductOwnerAgent(os.path.dirname(os.path.abspath(__file__)))
     agent.merge_and_formulate()
