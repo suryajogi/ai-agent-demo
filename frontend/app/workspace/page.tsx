@@ -1,16 +1,23 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import {
   apiDelete,
+  apiDownload,
   apiGet,
+  apiPost,
+  apiUpload,
   AssessmentTemplate,
   Control,
   Department,
   Entity,
+  getCurrentUser,
   Issue,
+  isLoggedIn,
+  logout,
   Risk,
   RiskAssessment,
   RiskSummaryReport,
@@ -18,19 +25,24 @@ import {
 
 import { AssessmentLauncherForm } from "./AssessmentLauncherForm";
 import { ControlForm } from "./ControlForm";
+import { ControlTestHistory } from "./ControlTestHistory";
 import { DepartmentForm } from "./DepartmentForm";
+import { EntityForm } from "./EntityForm";
+import { EvidenceList } from "./EvidenceList";
 import { IssueForm } from "./IssueForm";
+import { NotificationBell } from "./NotificationBell";
 import { HeatmapFilter, RiskHeatmap } from "./RiskHeatmap";
 import { RiskForm } from "./RiskForm";
 import { Card, DataTable, DetailModal, ReadField } from "./ui";
 
-type Tab = "risks" | "controls" | "issues" | "departments" | "assessments";
+type Tab = "risks" | "controls" | "issues" | "departments" | "entities" | "assessments";
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "risks", label: "Risks" },
   { id: "controls", label: "Controls" },
   { id: "issues", label: "Issues" },
   { id: "departments", label: "Departments" },
+  { id: "entities", label: "Entities" },
   { id: "assessments", label: "Assessments" },
 ];
 
@@ -43,10 +55,19 @@ function StatCard({ label, value }: { label: string; value: string }) {
   );
 }
 
+function isOverdueVendor(e: Entity): boolean {
+  if (e.type !== "Vendor") return false;
+  const today = new Date().toISOString().slice(0, 10);
+  const oneYearAgo = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+  return (!!e.contract_end_date && e.contract_end_date <= today) || (!!e.last_due_diligence_date && e.last_due_diligence_date <= oneYearAgo);
+}
+
 export default function WorkspacePage() {
+  const router = useRouter();
   const [tab, setTab] = useState<Tab>("risks");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [heatmapFilter, setHeatmapFilter] = useState<HeatmapFilter | null>(null);
+  const [loggedIn, setLoggedIn] = useState(() => isLoggedIn());
 
   const [summary, setSummary] = useState<RiskSummaryReport | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -61,7 +82,14 @@ export default function WorkspacePage() {
   const [viewingControl, setViewingControl] = useState<Control | null>(null);
   const [viewingIssue, setViewingIssue] = useState<Issue | null>(null);
   const [viewingDepartment, setViewingDepartment] = useState<Department | null>(null);
+  const [viewingEntity, setViewingEntity] = useState<Entity | null>(null);
   const [viewingAssessment, setViewingAssessment] = useState<RiskAssessment | null>(null);
+
+  const [riskSearch, setRiskSearch] = useState("");
+  const [controlSearch, setControlSearch] = useState("");
+  const [issueSearch, setIssueSearch] = useState("");
+  const [overdueVendorsOnly, setOverdueVendorsOnly] = useState(false);
+  const [importMessage, setImportMessage] = useState<string | null>(null);
 
   function reload() {
     Promise.all([
@@ -92,17 +120,39 @@ export default function WorkspacePage() {
     reload();
   }, []);
 
+  function requireAuthOrRedirect(): boolean {
+    if (isLoggedIn()) return true;
+    router.push("/login?next=/workspace");
+    return false;
+  }
+
+  function handleLogout() {
+    logout();
+    setLoggedIn(false);
+  }
+
   const entityName = (id: number | null) => entities.find((e) => e.id === id)?.name ?? "—";
   const riskName = (id: number | null) => risks.find((r) => r.id === id)?.name ?? "—";
   const controlName = (id: number | null) => controls.find((c) => c.id === id)?.name ?? "—";
 
-  const filteredRisks = heatmapFilter
-    ? risks.filter(
-        (r) =>
-          r.inherent_likelihood === heatmapFilter.likelihood &&
-          r.inherent_impact === heatmapFilter.impact
-      )
-    : risks;
+  const filteredRisks = risks
+    .filter((r) => (heatmapFilter ? r.inherent_likelihood === heatmapFilter.likelihood && r.inherent_impact === heatmapFilter.impact : true))
+    .filter((r) => (riskSearch ? r.name.toLowerCase().includes(riskSearch.toLowerCase()) : true));
+  const filteredControls = controls.filter((c) => (controlSearch ? c.name.toLowerCase().includes(controlSearch.toLowerCase()) : true));
+  const filteredIssues = issues.filter((i) => (issueSearch ? i.title.toLowerCase().includes(issueSearch.toLowerCase()) : true));
+  const filteredEntities = entities.filter((e) => (overdueVendorsOnly ? isOverdueVendor(e) : true));
+
+  async function handleImport(resource: "risks" | "controls" | "entities", file: File) {
+    const formData = new FormData();
+    formData.append("file", file);
+    try {
+      const result = await apiUpload<{ created: number; errors: string[] }>(`/api/v1/${resource}/import`, formData);
+      setImportMessage(`Imported ${result.created} row(s).${result.errors.length ? ` ${result.errors.length} error(s): ${result.errors.slice(0, 3).join("; ")}` : ""}`);
+      reload();
+    } catch (err) {
+      setImportMessage((err as Error).message);
+    }
+  }
 
   return (
     <div className="mx-auto w-full max-w-6xl px-6 py-10">
@@ -116,14 +166,37 @@ export default function WorkspacePage() {
             Create risks, controls, issues, departments, and launch assessments.
           </p>
         </div>
-        <Link href="/" className="text-sm text-zinc-500 hover:underline">
-          ← Home
-        </Link>
+        <div className="flex items-center gap-4">
+          <NotificationBell />
+          {loggedIn ? (
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-zinc-500">Signed in as {getCurrentUser()?.username}</span>
+              <button onClick={handleLogout} className="text-zinc-500 hover:underline">
+                Sign out
+              </button>
+            </div>
+          ) : (
+            <Link href="/login?next=/workspace" className="text-sm text-zinc-500 hover:underline">
+              Sign in
+            </Link>
+          )}
+          <Link href="/" className="text-sm text-zinc-500 hover:underline">
+            ← Home
+          </Link>
+        </div>
       </div>
 
       {loadError && (
         <p className="mb-6 rounded-md border border-red-300 bg-red-50 px-4 py-2 text-sm text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
-          {loadError}. Is the FastAPI backend running on port 8000?
+          {loadError}. Is the FastAPI backend running on port 8050?
+        </p>
+      )}
+      {importMessage && (
+        <p className="mb-6 flex items-center justify-between rounded-md border border-zinc-300 bg-zinc-50 px-4 py-2 text-sm text-zinc-700 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300">
+          {importMessage}
+          <button onClick={() => setImportMessage(null)} className="ml-4 text-zinc-400 hover:text-zinc-700">
+            ✕
+          </button>
         </p>
       )}
 
@@ -141,6 +214,24 @@ export default function WorkspacePage() {
           />
         </div>
       )}
+      <div className="mb-8 flex items-center gap-3">
+        <button
+          onClick={() => apiDownload("/api/v1/reports/risk-summary/pdf")}
+          className="text-sm text-zinc-500 hover:underline"
+        >
+          Export board PDF
+        </button>
+        <button
+          onClick={() =>
+            apiPost("/api/v1/reports/snapshot", {}).then(() =>
+              setImportMessage("Snapshot recorded for trend history.")
+            )
+          }
+          className="text-sm text-zinc-500 hover:underline"
+        >
+          Take trend snapshot
+        </button>
+      </div>
 
       <div className="mb-6 flex gap-1 border-b border-zinc-200 dark:border-zinc-800">
         {TABS.map((t) => (
@@ -170,15 +261,35 @@ export default function WorkspacePage() {
             title={
               heatmapFilter
                 ? `Risks (${filteredRisks.length} of ${risks.length} — Likelihood ${heatmapFilter.likelihood} × Impact ${heatmapFilter.impact})`
-                : `Risks (${risks.length})`
+                : `Risks (${filteredRisks.length} of ${risks.length})`
             }
           >
+            <div className="mb-3 flex items-center gap-3">
+              <input
+                className="w-64 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                placeholder="Search risks…"
+                value={riskSearch}
+                onChange={(e) => setRiskSearch(e.target.value)}
+              />
+              <button onClick={() => apiDownload("/api/v1/risks/export")} className="text-sm text-zinc-500 hover:underline">
+                Export CSV
+              </button>
+              <label className="cursor-pointer text-sm text-zinc-500 hover:underline">
+                Import CSV
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleImport("risks", e.target.files[0])}
+                />
+              </label>
+            </div>
             <DataTable
               rows={filteredRisks}
               onRowClick={(r) => setViewingRisk(r)}
-              onDelete={async (id) => {
-                await apiDelete(`/api/v1/risks/${id}`);
-                setRisks((prev) => prev.filter((r) => r.id !== id));
+              onDelete={(id) => {
+                if (!requireAuthOrRedirect()) return;
+                apiDelete(`/api/v1/risks/${id}`).then(() => setRisks((prev) => prev.filter((r) => r.id !== id)));
               }}
               columns={[
                 { header: "Name", render: (r) => r.name },
@@ -199,6 +310,17 @@ export default function WorkspacePage() {
                       ? r.residual_likelihood * r.residual_impact
                       : "—",
                 },
+                {
+                  header: "Appetite",
+                  render: (r) =>
+                    r.breaches_appetite ? (
+                      <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs text-red-700 dark:bg-red-950 dark:text-red-300">
+                        Breach
+                      </span>
+                    ) : (
+                      "—"
+                    ),
+                },
               ]}
             />
           </Card>
@@ -214,19 +336,40 @@ export default function WorkspacePage() {
               onSaved={(c) => setControls((prev) => [...prev, c])}
             />
           </Card>
-          <Card title={`Controls (${controls.length})`}>
+          <Card title={`Controls (${filteredControls.length} of ${controls.length})`}>
+            <div className="mb-3 flex items-center gap-3">
+              <input
+                className="w-64 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                placeholder="Search controls…"
+                value={controlSearch}
+                onChange={(e) => setControlSearch(e.target.value)}
+              />
+              <button onClick={() => apiDownload("/api/v1/controls/export")} className="text-sm text-zinc-500 hover:underline">
+                Export CSV
+              </button>
+              <label className="cursor-pointer text-sm text-zinc-500 hover:underline">
+                Import CSV
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleImport("controls", e.target.files[0])}
+                />
+              </label>
+            </div>
             <DataTable
-              rows={controls}
+              rows={filteredControls}
               onRowClick={(c) => setViewingControl(c)}
-              onDelete={async (id) => {
-                await apiDelete(`/api/v1/controls/${id}`);
-                setControls((prev) => prev.filter((c) => c.id !== id));
+              onDelete={(id) => {
+                if (!requireAuthOrRedirect()) return;
+                apiDelete(`/api/v1/controls/${id}`).then(() => setControls((prev) => prev.filter((c) => c.id !== id)));
               }}
               columns={[
                 { header: "Name", render: (c) => c.name },
                 { header: "Status", render: (c) => c.status },
                 { header: "Entity", render: (c) => entityName(c.entity_id) },
                 { header: "Mitigates", render: (c) => riskName(c.risk_id) },
+                { header: "Connector", render: (c) => c.test_connector_type ?? "—" },
               ]}
             />
           </Card>
@@ -242,13 +385,21 @@ export default function WorkspacePage() {
               onSaved={(i) => setIssues((prev) => [...prev, i])}
             />
           </Card>
-          <Card title={`Issues (${issues.length})`}>
+          <Card title={`Issues (${filteredIssues.length} of ${issues.length})`}>
+            <div className="mb-3">
+              <input
+                className="w-64 rounded-md border border-zinc-300 bg-white px-3 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-900"
+                placeholder="Search issues…"
+                value={issueSearch}
+                onChange={(e) => setIssueSearch(e.target.value)}
+              />
+            </div>
             <DataTable
-              rows={issues}
+              rows={filteredIssues}
               onRowClick={(i) => setViewingIssue(i)}
-              onDelete={async (id) => {
-                await apiDelete(`/api/v1/issues/${id}`);
-                setIssues((prev) => prev.filter((i) => i.id !== id));
+              onDelete={(id) => {
+                if (!requireAuthOrRedirect()) return;
+                apiDelete(`/api/v1/issues/${id}`).then(() => setIssues((prev) => prev.filter((i) => i.id !== id)));
               }}
               columns={[
                 { header: "Title", render: (i) => i.title },
@@ -272,14 +423,73 @@ export default function WorkspacePage() {
             <DataTable
               rows={departments}
               onRowClick={(d) => setViewingDepartment(d)}
-              onDelete={async (id) => {
-                await apiDelete(`/api/v1/departments/${id}`);
-                setDepartments((prev) => prev.filter((d) => d.id !== id));
+              onDelete={(id) => {
+                if (!requireAuthOrRedirect()) return;
+                apiDelete(`/api/v1/departments/${id}`).then(() => setDepartments((prev) => prev.filter((d) => d.id !== id)));
               }}
               columns={[
                 { header: "Name", render: (d) => d.name },
                 { header: "Manager", render: (d) => d.manager_id ?? "—" },
                 { header: "Cost Center", render: (d) => d.cost_center ?? "—" },
+              ]}
+            />
+          </Card>
+        </div>
+      )}
+
+      {tab === "entities" && (
+        <div className="grid gap-6">
+          <Card title="Create Entity">
+            <EntityForm departments={departments} onSaved={(e) => setEntities((prev) => [...prev, e])} />
+          </Card>
+          <Card title={`Entities (${filteredEntities.length} of ${entities.length})`}>
+            <div className="mb-3 flex items-center gap-3">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={overdueVendorsOnly}
+                  onChange={(e) => setOverdueVendorsOnly(e.target.checked)}
+                />
+                Overdue vendors only
+              </label>
+              <button onClick={() => apiDownload("/api/v1/entities/export")} className="text-sm text-zinc-500 hover:underline">
+                Export CSV
+              </button>
+              <label className="cursor-pointer text-sm text-zinc-500 hover:underline">
+                Import CSV
+                <input
+                  type="file"
+                  accept=".csv"
+                  className="hidden"
+                  onChange={(e) => e.target.files?.[0] && handleImport("entities", e.target.files[0])}
+                />
+              </label>
+            </div>
+            <DataTable
+              rows={filteredEntities}
+              onRowClick={(e) => setViewingEntity(e)}
+              onDelete={(id) => {
+                if (!requireAuthOrRedirect()) return;
+                apiDelete(`/api/v1/entities/${id}`).then(() => setEntities((prev) => prev.filter((e) => e.id !== id)));
+              }}
+              columns={[
+                { header: "Name", render: (e) => e.name },
+                { header: "Type", render: (e) => e.type },
+                { header: "Department", render: (e) => departments.find((d) => d.id === e.department_id)?.name ?? "—" },
+                { header: "Status", render: (e) => e.status },
+                {
+                  header: "Vendor Review",
+                  render: (e) =>
+                    isOverdueVendor(e) ? (
+                      <span className="rounded-full bg-orange-100 px-2 py-0.5 text-xs text-orange-700 dark:bg-orange-950 dark:text-orange-300">
+                        Overdue
+                      </span>
+                    ) : e.type === "Vendor" ? (
+                      "Current"
+                    ) : (
+                      "—"
+                    ),
+                },
               ]}
             />
           </Card>
@@ -296,6 +506,20 @@ export default function WorkspacePage() {
             />
           </Card>
           <Card title={`Assessments (${assessments.length})`}>
+            <div className="mb-3">
+              <button
+                onClick={() => {
+                  if (!requireAuthOrRedirect()) return;
+                  apiPost<{ generated: number }>("/api/v1/assessments/generate-recurring", {}).then((r) => {
+                    setImportMessage(`Generated ${r.generated} recurring assessment(s).`);
+                    reload();
+                  });
+                }}
+                className="text-sm text-zinc-500 hover:underline"
+              >
+                Generate due recurring assessments
+              </button>
+            </div>
             <DataTable
               rows={assessments}
               onRowClick={(a) => setViewingAssessment(a)}
@@ -328,9 +552,11 @@ export default function WorkspacePage() {
               <ReadField label="Inherent Impact" value={r.inherent_impact} />
               <ReadField label="Residual Likelihood" value={r.residual_likelihood} />
               <ReadField label="Residual Impact" value={r.residual_impact} />
+              <ReadField label="Breaches Appetite" value={r.breaches_appetite ? "Yes" : "No"} />
               <div className="sm:col-span-2">
                 <ReadField label="Description" value={r.description} />
               </div>
+              <EvidenceList recordType="risk" recordId={r.id} />
             </>
           )}
           renderEdit={(r, onSaved, onCancel) => (
@@ -353,9 +579,12 @@ export default function WorkspacePage() {
               <ReadField label="Status" value={c.status} />
               <ReadField label="Entity" value={entityName(c.entity_id)} />
               <ReadField label="Mitigates Risk" value={riskName(c.risk_id)} />
+              <ReadField label="Test Connector" value={c.test_connector_type ?? "None"} />
               <div className="sm:col-span-2">
                 <ReadField label="Description" value={c.description} />
               </div>
+              <ControlTestHistory controlId={c.id} />
+              <EvidenceList recordType="control" recordId={c.id} />
             </>
           )}
           renderEdit={(c, onSaved, onCancel) => (
@@ -390,6 +619,11 @@ export default function WorkspacePage() {
               <div className="sm:col-span-2">
                 <ReadField label="Description" value={i.description} />
               </div>
+              <ReadField label="Root Cause" value={i.root_cause} />
+              <ReadField label="Corrective Action" value={i.corrective_action} />
+              <ReadField label="Effectiveness Check Date" value={i.effectiveness_check_date} />
+              <ReadField label="Recurrence Count" value={i.recurrence_count} />
+              <EvidenceList recordType="issue" recordId={i.id} />
             </>
           )}
           renderEdit={(i, onSaved, onCancel) => (
@@ -425,6 +659,32 @@ export default function WorkspacePage() {
         />
       )}
 
+      {viewingEntity && (
+        <DetailModal
+          title={`Entity: ${viewingEntity.name}`}
+          record={viewingEntity}
+          onClose={() => setViewingEntity(null)}
+          onSaved={(updated) =>
+            setEntities((prev) => prev.map((e) => (e.id === updated.id ? updated : e)))
+          }
+          renderView={(e) => (
+            <>
+              <ReadField label="Name" value={e.name} />
+              <ReadField label="Type" value={e.type} />
+              <ReadField label="Department" value={departments.find((d) => d.id === e.department_id)?.name} />
+              <ReadField label="Owner" value={e.owner_id} />
+              <ReadField label="Status" value={e.status} />
+              <ReadField label="Criticality Tier" value={e.criticality_tier} />
+              <ReadField label="Contract End Date" value={e.contract_end_date} />
+              <ReadField label="Last Due Diligence" value={e.last_due_diligence_date} />
+            </>
+          )}
+          renderEdit={(e, onSaved, onCancel) => (
+            <EntityForm departments={departments} record={e} onSaved={onSaved} onCancel={onCancel} />
+          )}
+        />
+      )}
+
       {viewingAssessment && (
         <DetailModal
           title={`Assessment: ${riskName(viewingAssessment.risk_id)}`}
@@ -442,6 +702,7 @@ export default function WorkspacePage() {
               <div className="sm:col-span-2">
                 <ReadField label="Comments" value={a.comments} />
               </div>
+              <EvidenceList recordType="assessment" recordId={a.id} />
             </>
           )}
           renderEdit={(a, onSaved, onCancel) => (

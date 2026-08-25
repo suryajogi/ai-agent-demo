@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 
-import { apiPost, apiPut, CONTROL_STATUSES, Control, Entity, Risk } from "@/lib/api";
+import { apiPost, apiPut, CONNECTOR_TYPES, CONTROL_STATUSES, Control, Entity, Risk } from "@/lib/api";
 
 import { Field, inputClass, SubmitButton } from "./ui";
 
@@ -26,6 +26,8 @@ export function ControlForm({
     status: record?.status ?? "Draft",
     entity_id: record?.entity_id != null ? String(record.entity_id) : "",
     risk_id: record?.risk_id != null ? String(record.risk_id) : "",
+    test_connector_type: record?.test_connector_type ?? "none",
+    connector_url: record?.test_connector_config?.url ?? "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +43,11 @@ export function ControlForm({
         status: form.status,
         entity_id: form.entity_id ? Number(form.entity_id) : null,
         risk_id: form.risk_id ? Number(form.risk_id) : null,
+        test_connector_type: form.test_connector_type === "none" ? null : form.test_connector_type,
+        test_connector_config:
+          form.test_connector_type === "http_health_check" && form.connector_url
+            ? { url: form.connector_url, expect_status: 200 }
+            : null,
       };
       const saved = isEdit
         ? await apiPut<Control>(`/api/v1/controls/${record!.id}`, payload)
@@ -115,6 +122,29 @@ export function ControlForm({
           />
         </Field>
       </div>
+      <Field label="Test Connector">
+        <select
+          className={inputClass}
+          value={form.test_connector_type}
+          onChange={(e) => setForm({ ...form, test_connector_type: e.target.value })}
+        >
+          {CONNECTOR_TYPES.map((c) => (
+            <option key={c} value={c}>
+              {c === "none" ? "None (simulated Pass/Fail)" : "HTTP Health Check"}
+            </option>
+          ))}
+        </select>
+      </Field>
+      {form.test_connector_type === "http_health_check" && (
+        <Field label="Health Check URL">
+          <input
+            className={inputClass}
+            value={form.connector_url}
+            onChange={(e) => setForm({ ...form, connector_url: e.target.value })}
+            placeholder="https://example.com/health"
+          />
+        </Field>
+      )}
       {error && <p className="sm:col-span-2 text-sm text-red-600">{error}</p>}
       <div className="flex items-center gap-3 sm:col-span-2">
         <SubmitButton disabled={submitting}>

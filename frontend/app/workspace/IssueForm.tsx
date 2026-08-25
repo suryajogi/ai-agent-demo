@@ -38,6 +38,9 @@ export function IssueForm({
     assigned_to: record?.assigned_to ?? "",
     risk_id: record?.risk_id != null ? String(record.risk_id) : "",
     control_id: record?.control_id != null ? String(record.control_id) : "",
+    root_cause: record?.root_cause ?? "",
+    corrective_action: record?.corrective_action ?? "",
+    effectiveness_check_date: record?.effectiveness_check_date ?? "",
   });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +59,9 @@ export function IssueForm({
         assigned_to: form.assigned_to || null,
         risk_id: form.risk_id ? Number(form.risk_id) : null,
         control_id: form.control_id ? Number(form.control_id) : null,
+        root_cause: form.root_cause || null,
+        corrective_action: form.corrective_action || null,
+        effectiveness_check_date: form.effectiveness_check_date || null,
       };
       const saved = isEdit
         ? await apiPut<Issue>(`/api/v1/issues/${record!.id}`, payload)
@@ -165,6 +171,43 @@ export function IssueForm({
           />
         </Field>
       </div>
+      {isEdit && (
+        <>
+          <div className="sm:col-span-2">
+            <p className="text-xs font-medium uppercase tracking-wide text-zinc-500">
+              Root cause & corrective action (required to close)
+            </p>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Root Cause">
+              <textarea
+                className={inputClass}
+                rows={2}
+                value={form.root_cause}
+                onChange={(e) => setForm({ ...form, root_cause: e.target.value })}
+              />
+            </Field>
+          </div>
+          <div className="sm:col-span-2">
+            <Field label="Corrective Action">
+              <textarea
+                className={inputClass}
+                rows={2}
+                value={form.corrective_action}
+                onChange={(e) => setForm({ ...form, corrective_action: e.target.value })}
+              />
+            </Field>
+          </div>
+          <Field label="Effectiveness Check Date">
+            <input
+              type="date"
+              className={inputClass}
+              value={form.effectiveness_check_date}
+              onChange={(e) => setForm({ ...form, effectiveness_check_date: e.target.value })}
+            />
+          </Field>
+        </>
+      )}
       {error && <p className="sm:col-span-2 text-sm text-red-600">{error}</p>}
       <div className="flex items-center gap-3 sm:col-span-2">
         <SubmitButton disabled={submitting}>
