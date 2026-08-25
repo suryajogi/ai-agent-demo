@@ -1,18 +1,27 @@
 # 📑 ServiceNow GRC Replication Architecture Manual
-*Generated automatically by Documentation Agent on 2026-08-24*
+*Generated automatically by Documentation Agent on 2026-08-25*
 
 ---
 
 ## 🏗️ 1. Global System Architecture
-This project replicates the data relationships and form structures of the **ServiceNow GRC: Risk Management** module outside of the ServiceNow platform ecosystem. It splits the core responsibilities cleanly into a headless API engine layer and a single-page web dashboard application workspace.
+This project replicates the data relationships and form structures of the **ServiceNow GRC: Risk Management** module outside of the ServiceNow platform ecosystem. It splits the core responsibilities cleanly into a headless API engine layer, a single-page web dashboard application workspace, and a handful of standalone role-playing automation scripts that exercise the live API.
 
 ### Core Repository Directory Topology
 ```text
 📁 ai-agent-demo/
+    ├── 📄 PRODUCT_BACKLOG.md
+    ├── 📄 end_user_agent.py
+    ├── 📄 ARCHITECTURE.md
+    ├── 📄 agentic_workflow.py
+    ├── 📄 requirements.docx
     ├── 📄 README.md
     ├── 📄 documentation_agent.py
+    ├── 📄 summary_email_agent.py
     ├── 📄 AGENTS.md
+    ├── 📄 PRODUCT_BACKLOG_CANDIDATES.csv
+    ├── 📄 assessor_agent.py
     ├── 📄 CLAUDE.md
+    ├── 📄 product_owner_agent.py
     ├── 📁 frontend/
         ├── 📄 postcss.config.mjs
         ├── 📄 tsconfig.tsbuildinfo
@@ -33,13 +42,20 @@ This project replicates the data relationships and form structures of the **Serv
             ├── 📄 globals.css
             ├── 📁 workspace/
                 ├── 📄 ControlForm.tsx
+                ├── 📄 ControlTestHistory.tsx
+                ├── 📄 EvidenceList.tsx
+                ├── 📄 NotificationBell.tsx
                 ├── 📄 DepartmentForm.tsx
                 ├── 📄 AssessmentLauncherForm.tsx
+                ├── 📄 RiskHeatmap.tsx
                 ├── 📄 IssueForm.tsx
                 ├── 📄 page.tsx
                 ├── 📄 RiskForm.tsx
+                ├── 📄 EntityForm.tsx
                 ├── 📄 ui.tsx
             ├── 📁 assessor/
+                ├── 📄 page.tsx
+            ├── 📁 login/
                 ├── 📄 page.tsx
         ├── 📁 public/
             ├── 📄 file.svg
@@ -49,43 +65,77 @@ This project replicates the data relationships and form structures of the **Serv
             ├── 📄 window.svg
         ├── 📁 lib/
             ├── 📄 api.ts
+    ├── 📁 tests/
+        ├── 📄 README.md
     ├── 📁 backend/
+        ├── 📄 auth.py
         ├── 📄 models.py
         ├── 📄 requirements.txt
+        ├── 📄 scoring.py
         ├── 📄 database.py
         ├── 📄 schemas.py
         ├── 📄 reporting_agent.py
         ├── 📄 main.py
+        ├── 📄 control_testing.py
         ├── 📄 init_db.py
+    ├── 📁 ai/
+        ├── 📄 README.md
+        ├── 📁 tools/
+            ├── 📄 __init__.py
+        ├── 📁 agents/
+            ├── 📄 __init__.py
+            ├── 📄 evidence_agent.py
+            ├── 📄 manager_agent.py
+            ├── 📄 assessment_agent.py
+            ├── 📄 risk_agent.py
+        ├── 📁 rag/
+            ├── 📄 __init__.py
+    ├── 📁 .github/
+        ├── 📁 workflows/
+            ├── 📄 doc-update.yml
 ```
 
 ---
 
 ## 💻 2. Tech Stack Blueprint
-- **Backend API Layer:** Python 3.12, FastAPI framework, Uvicorn ASGI production server, SQLAlchemy ORM toolkit.
-- **Relational Storage:** SQLite database file local instance (`grc_risk.db`).
-- **Frontend Dashboard:** React Framework, Next.js rendering engine architecture, Tailwind CSS utilities framework.
-- **Package Management:** `uv` environment system (Python backend), `fnm` Node runtime supervisor (Frontend).
+- **Backend API Layer:** Python 3.12, FastAPI, Uvicorn ASGI server, SQLAlchemy ORM.
+- **Auth:** JWT bearer tokens (`python-jose`) + bcrypt password hashing (`passlib`) — writes require a token, GET stays open for the read-only dashboard experience.
+- **Relational Storage:** SQLite, local file `backend/grc.db` (created/reset via `init_db.py`; no migration tool — schema changes are applied by editing `models.py` and reseeding).
+- **Other backend deps:** `python-multipart` (file uploads), `httpx` (outbound control-test connector calls), `fpdf2` (PDF report generation).
+- **Frontend Dashboard:** React 19, Next.js 16 (App Router), Tailwind CSS v4, TypeScript.
+- **Package Management:** `uv` (Python backend), `npm` (frontend).
 
 ---
 
 ## 🗄️ 3. Backend Architecture (`/backend`)
-The data layer replicates the underlying schema properties of ServiceNow GRC records:
-- **`models.py`**: Declares structured entity mapping fields for Organizational tables (`departments`, `entities`), Governance policies (`risk_scopes`, `risk_methodologies`), Risk Registries (`risk_frameworks`, `risk_statements`, `risks`), Operations (`risk_assessments`, `risk_tasks`), and Compliance extensions (`controls`, `issues`).
-- **`init_db.py`**: Mass-seeding automation pipeline file that structures relational constraints and feeds exactly **50 comprehensive sample rows** to each table to fulfill system demo stress-testing metrics.
-- **`main.py`**: Exposes complete HTTP CRUD (`GET`, `POST`, `PUT`, `DELETE`) API route paths, alongside optimized visual statistic aggregate paths (`/api/v1/dashboard/stats`).
+- **`models.py`**: ~25 tables spanning identity (`roles`, `users`), org structure (`departments`, `entities` — with vendor lifecycle fields), risk governance (`risk_scopes`, `risk_methodologies`, `risk_frameworks`, `risk_statements`, `risks`), execution (`risk_assessments`, `risk_tasks`, `projects`), compliance (`controls`, `issues` — with CAPA fields, `risk_mitigations`, `control_framework_map`, `risk_appetite_thresholds`), the assessment engine (`assessment_templates`, `assessment_questions`, `assessment_options`, `assessment_responses`), and supporting tables (`evidence_attachments`, `control_test_results`, `notifications`, `risk_score_history`, `audit_logs`).
+- **`main.py`**: a generic CRUD router factory (`build_crud_router`) drives every resource's list/get/create/update/delete endpoints, extended with role gates, free-text search, department-scoped multi-tenancy, and per-resource hooks (a segregation-of-duties gate on risk acceptance, a CAPA-closure gate on issues, auto-instantiating assessment responses on creation). Custom endpoints layer on top for auth, evidence upload/download, CSV bulk import/export, PDF/board reporting, notifications, recurring-assessment generation, and pluggable control testing.
+- **`auth.py`**: login/token issuance, password hashing, and the `require_user`/`require_roles` FastAPI dependencies used across the router.
+- **`scoring.py`** / **`control_testing.py`**: configurable risk-scoring bands per methodology, and pluggable control-test connectors (a real HTTP health-check connector, falling back to the original simulated Pass/Fail for unconfigured controls).
+- **`init_db.py`**: seeds departments, entities, the full risk/control/issue/assessment register, appetite thresholds, and demo user accounts (password `changeme123` for every seeded `user.NNN`).
+- **`reporting_agent.py`**: standalone executive-summary printout, run manually from `backend/`.
 
 ---
 
 ## 🎨 4. Frontend Workspace UI (`/frontend`)
-The presentation tier leverages modular rendering templates configured to isolate administrative dashboards from user-facing components:
-- **Interface A (GRC Management Hub):** Houses inputs and entry fields allowing risk officers to author new risks, track issue items, and update department boundaries.
-- **Interface B (Assessor Portal Workflow):** A streamlined questionnaire panel featuring a 1-5 scalar point layout that pushes active responses directly to the calculated database metrics engine.
-- **Live Metric Counter Banner:** A dynamic fetching utility that eliminates standard text strings to highlight real-time numbers of profiled risks, failed controls, and pending audit reviews.
+- **`/login`**: JWT sign-in; the dashboard itself stays browsable read-only without an account.
+- **Interface A — `/workspace`**: six tabs (Risks, Controls, Issues, Departments, Entities, Assessments), each backed by a shared `DataTable`/`DetailModal`/`Card` set of primitives (`app/workspace/ui.tsx`) and a per-resource `*Form` component. Adds evidence attachment upload, appetite-breach badges, CSV import/export, PDF export, an in-app notifications widget, and control test-history/connector configuration on top of standard CRUD.
+- **Interface B — `/assessor`**: a self-declared-identity questionnaire portal that submits scored answers through the same backend the CLI `assessor_agent.py` script drives.
+- **Live Metric Banner** (home page): fetches `/api/v1/dashboard/stats` for a real-time risk/control/issue snapshot.
 
 ---
 
 ## 🔗 5. Integration Framework & Pipelines
-- **Internal Integration Bridge:** Communication between Next.js and FastAPI uses standard asynchronous HTTP `fetch` connections addressing cross-origin parameters (`CORS`).
-- **Database Handshake Bridge:** Models leverage external foreign key anchors (`FK`) to map operational controls back to primary asset profiles and risk statement indices automatically.
-- **Reporting Agent Endpoint Link:** A unified data export node `/api/v1/reports/risk-summary` is established to translate running rows into diagnostic executive overview briefs.
+- **Frontend ↔ Backend:** Next.js talks to FastAPI over CORS-enabled `fetch`; the backend runs on port **8050** (see `README.md` / `frontend/.env.local`), the frontend on 3000.
+- **Reporting:** `/api/v1/reports/risk-summary` (JSON), `/api/v1/reports/risk-summary/pdf` (board-ready PDF), `/api/v1/reports/risk-summary/history` (trend snapshots).
+- **CI:** `.github/workflows/doc-update.yml` re-runs this Documentation Agent on every push to `main` and commits `ARCHITECTURE.md` back if it changed.
+
+---
+
+## 🤖 6. Automation Scripts (repo root)
+A consistent convention — a small class taking `root_dir`, one clearly-named method, emoji-prefixed status prints, `if __name__ == "__main__"` entry point:
+- **`documentation_agent.py`**: this script — regenerates this file.
+- **`product_owner_agent.py`**: reads `requirements.docx` + the live schema and appends new candidate requirements to `PRODUCT_BACKLOG_CANDIDATES.csv` via a local Ollama model, without ever overwriting existing rows or a reviewer's decisions.
+- **`end_user_agent.py`** / **`assessor_agent.py`**: log into the *live* API as seeded demo users and create records / submit assessments over real HTTP, exercising real auth and RBAC.
+- **`summary_email_agent.py`**: pulls the live risk summary + PDF and drafts (does not send, by default) an executive email into `reports/`.
+- **`agentic_workflow.py`**: an experimental full-autonomy pipeline that regenerates `backend/main.py` via a local model and auto-commits/pushes to `main` with no review gate — higher risk than the scripts above; not a template to copy for new automation.
