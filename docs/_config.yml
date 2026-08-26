@@ -1,0 +1,7 @@
+theme: jekyll-theme-minimal
+title: ai-agent-demo — Developer's Guide
+description: >-
+  A from-zero technical walkthrough of the ServiceNow GRC Replication
+  Platform, written for a ServiceNow developer with no prior Python,
+  bash, or React experience.
+show_downloads: false
