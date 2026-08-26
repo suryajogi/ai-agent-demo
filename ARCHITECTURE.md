@@ -1,5 +1,5 @@
 # 📑 ServiceNow GRC Replication Architecture Manual
-*Generated automatically by Documentation Agent on 2026-08-25*
+*Generated automatically by Documentation Agent on 2026-08-26*
 
 ---
 
@@ -38,6 +38,17 @@ This project replicates the data relationships and form structures of the **Serv
     ├── 📁 .github/
         ├── 📁 workflows/
             ├── 📄 doc-update.yml
+    ├── 📁 docs/
+        ├── 📄 _config.yml
+        ├── 📄 index.html
+        ├── 📄 02-architecture-overview.md
+        ├── 📄 01-your-toolbox.md
+        ├── 📄 03-backend-deep-dive.md
+        ├── 📄 00-start-here.md
+        ├── 📄 04-frontend-deep-dive.md
+        ├── 📄 05-automation-agents.md
+        ├── 📄 07-glossary.md
+        ├── 📄 06-running-locally.md
     ├── 📁 frontend/
         ├── 📄 eslint.config.mjs
         ├── 📄 CLAUDE.md
